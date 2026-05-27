@@ -1,0 +1,103 @@
+# ===========================
+# Operating System Files
+# ===========================
+.DS_Store
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ===========================
+# IDE / Editor
+# ===========================
+.idea/
+*.iml
+*.ipr
+*.iws
+.vscode/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# ===========================
+# Java / Spring Boot
+# ===========================
+ITSSBE/target/
+ITSSBE/.mvn/wrapper/
+*.class
+*.jar
+*.war
+*.ear
+*.log
+pom.xml.tag
+pom.xml.releaseBackup
+pom.xml.versionsBackup
+pom.xml.next
+release.properties
+dependency-reduced-pom.xml
+buildNumber.properties
+.mvn/timing.properties
+.mvn/wrapper/maven-wrapper.jar
+
+# Spring Boot
+spring-boot-*.jar
+
+# ===========================
+# Node.js / Next.js (Frontend)
+# ===========================
+ITSSFE/node_modules/
+ITSSFE/.next/
+ITSSFE/out/
+ITSSFE/.cache/
+ITSSFE/package-lock.json
+
+# npm/yarn/pnpm debug logs
+ITSSFE/npm-debug.log*
+ITSSFE/yarn-debug.log*
+ITSSFE/yarn-error.log*
+ITSSFE/.pnpm-store/
+
+# ===========================
+# Environment & Secrets
+# ===========================
+*.env
+*.env.local
+*.env.*.local
+.env.production
+.env.production.local
+secrets.properties
+credentials.properties
+*.pem
+*.key
+*.crt
+*.p12
+*.jks
+
+# ===========================
+# Build Output
+# ===========================
+dist/
+build/
+out/
+*.tgz
+
+# ===========================
+# Logs
+# ===========================
+*.log
+logs/
+*.log.*
+
+# ===========================
+# Temporary / Misc
+# ===========================
+*.tmp
+*.temp
+*.bak
+*.orig
+*.old
+*.cache
+*.tmp
