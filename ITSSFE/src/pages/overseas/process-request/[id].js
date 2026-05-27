@@ -36,7 +36,7 @@ function StatusBadge({ status }) {
   return React.createElement(Chip, { size: 'small', icon: c.icon, label: c.label, color: c.color, sx: { height: 22, fontSize: '0.7rem' } });
 }
 
-function Step1AssignSites({ requestId, items, assignments, sites, onBack, onNext }) {
+function Step1AssignSites({ requestId, items, assignments, sites, hasSentInquiries, onBack, onNext }) {
   const { t } = useTranslation();
   const [assignMap, setAssignMap] = React.useState({});
   const [saving, setSaving] = React.useState(false);
@@ -173,7 +173,7 @@ function Step1AssignSites({ requestId, items, assignments, sites, onBack, onNext
       React.createElement(Chip, { label: t('overseas.processRequest.pending') + ': ' + items.filter(i => !assignMap[i.merchandiseId]?.siteId && !assignMap[i.merchandiseId]?.rejectReason).length, color: 'default', variant: 'outlined' })
     ),
     React.createElement(Box, { sx: { mt: 3, display: 'flex', justifyContent: 'space-between' } },
-      React.createElement(Button, { onClick: onBack, children: t('overseas.processRequest.back') }),
+      React.createElement(Button, { onClick: onBack, disabled: hasSentInquiries, children: t('overseas.processRequest.back') }),
       React.createElement(Button, { variant: 'contained', onClick: handleNext, disabled: saving, startIcon: React.createElement(FactCheckIcon) },
         saving ? t('overseas.processRequest.saving') : t('overseas.processRequest.saveAndContinue')
       )
@@ -181,7 +181,7 @@ function Step1AssignSites({ requestId, items, assignments, sites, onBack, onNext
   );
 }
 
-function Step2SendInquiries({ requestId, assignments, sites, onBack, onNext, setAssignments }) {
+function Step2SendInquiries({ requestId, assignments, sites, hasSentInquiries, onBack, onNext, setAssignments }) {
   const { t } = useTranslation();
   const [assignList, setAssignList] = React.useState([]);
   const [sending, setSending] = React.useState(false);
@@ -251,7 +251,7 @@ function Step2SendInquiries({ requestId, assignments, sites, onBack, onNext, set
       })
     ),
     React.createElement(Box, { sx: { mt: 3, display: 'flex', justifyContent: 'space-between' } },
-      React.createElement(Button, { onClick: onBack, children: t('overseas.processRequest.back') }),
+      React.createElement(Button, { onClick: onBack, disabled: sent, children: t('overseas.processRequest.back') }),
       sent
         ? React.createElement(Button, { variant: 'contained', onClick: onNext, startIcon: React.createElement(CheckCircleIcon) }, t('overseas.processRequest.sentContinue'))
         : React.createElement(Button, { variant: 'contained', color: 'primary', onClick: handleSend, disabled: sending, startIcon: React.createElement(SendIcon) },
@@ -261,7 +261,7 @@ function Step2SendInquiries({ requestId, assignments, sites, onBack, onNext, set
   );
 }
 
-function Step3Track({ requestId, assignments, sites, onBack, onNext }) {
+function Step3Track({ requestId, assignments, sites, hasSentInquiries, onBack, onNext }) {
   const { t } = useTranslation();
   const [statusMap, setStatusMap] = React.useState({});
   const [loading, setLoading] = React.useState(true);
@@ -327,7 +327,7 @@ function Step3Track({ requestId, assignments, sites, onBack, onNext }) {
           })
         ),
     React.createElement(Box, { sx: { mt: 3, display: 'flex', justifyContent: 'space-between' } },
-      React.createElement(Button, { onClick: onBack, children: t('overseas.processRequest.back') }),
+      React.createElement(Button, { onClick: onBack, disabled: hasSentInquiries, children: t('overseas.processRequest.back') }),
       React.createElement(Button, { variant: 'contained', onClick: onNext, disabled: loading || !anyResponded },
         anyResponded ? t('overseas.processRequest.continueMatrix') : t('overseas.processRequest.waitingForResponse')
       )
@@ -335,7 +335,7 @@ function Step3Track({ requestId, assignments, sites, onBack, onNext }) {
   );
 }
 
-function Step4Matrix({ requestId, items, assignments, sites, onBack }) {
+function Step4Matrix({ requestId, items, assignments, sites, hasSentInquiries, onBack }) {
   const { t } = useTranslation();
   const [matrix, setMatrix] = React.useState({});
   const [assignList, setAssignList] = React.useState([]);
@@ -440,7 +440,7 @@ function Step4Matrix({ requestId, items, assignments, sites, onBack }) {
       onClose: () => setPoDialog(false),
       onCreated: (pos) => { setAlert(t('overseas.processRequest.createdSuccessfully') + ' ' + pos.length + ' ' + t('overseas.processRequest.purchaseOrdersCreated')); setPoDialog(false); }
     }),
-    React.createElement(Box, { sx: { mt: 3 } }, React.createElement(Button, { onClick: onBack, children: t('overseas.processRequest.back') }))
+    React.createElement(Box, { sx: { mt: 3 } }, React.createElement(Button, { onClick: onBack, disabled: hasSentInquiries, children: t('overseas.processRequest.back') }))
   );
 }
 
@@ -677,22 +677,13 @@ function ProcessRequestContent() {
     }).catch(() => {});
   }, []);
 
-  React.useEffect(() => {
-    if (!request || request.status !== 'PROCESSING') return;
-    if (!assignments.length) return;
-    const hasSent = assignments.some(a => a.status === 'INQUIRY_SENT');
-    const hasResponded = assignments.some(a => a.status === 'RESPONDED' || a.status === 'TIMEOUT');
-    if (hasResponded && activeStep < 3) setActiveStep(3);
-    else if (hasSent && activeStep < 2) setActiveStep(2);
-    else if (activeStep < 1) setActiveStep(1);
-  }, [request, assignments, activeStep]);
-
   if (loading) return React.createElement(LinearProgress);
   if (!request) return React.createElement(Container, { maxWidth: 'xl' },
     React.createElement(Typography, { variant: 'h6', color: 'text.secondary' }, t('overseas.processRequest.notFound'))
   );
 
   const isProcessing = request.status === 'PROCESSING';
+  const hasSentInquiries = assignments.some(a => a.status === 'INQUIRY_SENT' || a.status === 'RESPONDED' || a.status === 'TIMEOUT');
   const handleNext = () => setActiveStep(s => Math.min(s + 1, stepLabels.length - 1));
   const handleBack = () => setActiveStep(s => Math.max(s - 1, 0));
   const statusLabel = request.status === 'PROCESSING' ? t('overseas.processRequest.processing') : request.status === 'DONE' ? t('overseas.processRequest.completed') : request.status;
@@ -754,10 +745,10 @@ function ProcessRequestContent() {
           ),
           React.createElement(Card, { sx: { border: '1px solid #E2E8F0' }, elevation: 0 },
             React.createElement(CardContent, null,
-              activeStep === 0 && React.createElement(Step1AssignSites, { requestId: request.id, items, assignments, sites, onBack: handleBack, onNext: handleNext }),
-              activeStep === 1 && React.createElement(Step2SendInquiries, { requestId: request.id, assignments, sites, onBack: handleBack, onNext: handleNext, setAssignments }),
-              activeStep === 2 && React.createElement(Step3Track, { requestId: request.id, assignments, sites, onBack: handleBack, onNext: handleNext }),
-              activeStep === 3 && React.createElement(Step4Matrix, { requestId: request.id, items, assignments, sites, onBack: handleBack })
+              activeStep === 0 && React.createElement(Step1AssignSites, { requestId: request.id, items, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext }),
+              activeStep === 1 && React.createElement(Step2SendInquiries, { requestId: request.id, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext, setAssignments }),
+              activeStep === 2 && React.createElement(Step3Track, { requestId: request.id, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext }),
+              activeStep === 3 && React.createElement(Step4Matrix, { requestId: request.id, items, assignments, sites, hasSentInquiries, onBack: handleBack })
             )
           )
         )
