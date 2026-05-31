@@ -81,6 +81,9 @@ export const requestApi = {
   // Step 1: Gán site cho mỗi mặt hàng (1 site / 1 mặt hàng)
   getMerchandiseAssignments: (id) => wrap('get', `/requests/${id}/merchandise-assignments`),
   saveMerchandiseAssignments: (id, assignments) => wrap('post', `/requests/${id}/merchandise-assignments`, assignments),
+  // Multi-site: chọn nhiều site / mặt hàng
+  getSitePicks: (id) => wrap('get', `/requests/${id}/site-picks`),
+  saveSitePicks: (id, picks) => wrap('post', `/requests/${id}/site-picks`, picks),
   // Step 2
   sendInquiries: (id) => wrap('post', `/requests/${id}/send-inquiries`),
   // Step 3
@@ -142,6 +145,7 @@ export const discrepancyApi = {
 };
 
 export const siteMerchandiseApi = {
+  getAll: () => wrap('get', '/site-merchandise'),
   getBySite: (siteId) => wrap('get', `/site-merchandise/site/${siteId}`),
   getAvailable: (siteId) => wrap('get', `/site-merchandise/site/${siteId}/available`),
   addMerchandise: (siteId, data) => wrap('post', `/site-merchandise/site/${siteId}/add`, data),

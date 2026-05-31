@@ -25,6 +25,12 @@ public interface IProcessRequestService {
     // Lấy danh sách assignments đã lưu
     List<MerchandiseAssignmentDTO> getMerchandiseAssignmentsByRequest(Integer requestId);
 
+    // Multi-site: lưu lựa chọn (mặt hàng × site) — cho phép 1 mặt hàng hỏi nhiều site
+    void saveSitePicks(Integer requestId, List<SitePickRequest> picks);
+
+    // Multi-site: lấy các lựa chọn đã lưu (một dòng / (mặt hàng × site))
+    List<SitePickDTO> getSitePicks(Integer requestId);
+
     // Step 2: Gửi yêu cầu kiểm tra tồn kho đến các Site
     void sendInquiries(Integer requestId);
 

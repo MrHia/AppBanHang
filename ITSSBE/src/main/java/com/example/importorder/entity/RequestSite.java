@@ -7,7 +7,7 @@ import lombok.*;
 @Getter @Setter @NoArgsConstructor @AllArgsConstructor
 @Entity
 @Table(name = "request_site",
-    uniqueConstraints = @UniqueConstraint(columnNames = {"process_request_id", "merchandise_id"}))
+    uniqueConstraints = @UniqueConstraint(columnNames = {"process_request_id", "merchandise_id", "site_id"}))
 public class RequestSite {
     @Id @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Integer id;

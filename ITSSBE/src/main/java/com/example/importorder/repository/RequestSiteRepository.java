@@ -14,6 +14,9 @@ public interface RequestSiteRepository extends JpaRepository<RequestSite, Intege
 
     Optional<RequestSite> findByProcessRequestIdAndMerchandiseId(Integer requestId, Integer merchandiseId);
 
+    // Multi-site: tra cứu theo (request, merchandise, site) cho luồng chọn nhiều site/mặt hàng
+    Optional<RequestSite> findByProcessRequestIdAndMerchandiseIdAndSiteId(Integer requestId, Integer merchandiseId, Integer siteId);
+
     List<RequestSite> findByProcessRequestIdAndStatus(Integer requestId, RequestSite.SelectionStatus status);
 
     @Query("SELECT rs FROM RequestSite rs WHERE rs.processRequest.id = :requestId AND rs.status = :status")

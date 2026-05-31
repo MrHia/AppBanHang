@@ -31,7 +31,7 @@ function RequestsContent() {
                 <TableCell>{r.createdByName}</TableCell>
                 <TableCell>{r.desiredDate}</TableCell>
                 <TableCell><Chip label={statusLabel[r.status] || r.status} size="small" color={statusColor[r.status] || 'default'} /></TableCell>
-                <TableCell><Button size="small" onClick={() => router.push(`/overseas/process-request/${r.id}`)}>{t('overseas.requests.detail')}</Button></TableCell>
+                <TableCell><Button size="small" onClick={() => router.push(`/overseas/order-matrix/${r.id}`)}>{t('overseas.requests.detail')}</Button></TableCell>
               </TableRow>
             ))}
           </TableBody>

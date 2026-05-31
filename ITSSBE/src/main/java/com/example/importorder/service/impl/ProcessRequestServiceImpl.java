@@ -275,6 +275,79 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     }
 
     // ============================================================
+    // Multi-site: lưu lựa chọn (mặt hàng × site) — 1 mặt hàng có thể hỏi nhiều site
+    // ============================================================
+    @Override
+    @Transactional
+    public void saveSitePicks(Integer requestId, List<SitePickRequest> picks) {
+        if (picks == null || picks.isEmpty()) {
+            throw new IllegalArgumentException("Phải chọn ít nhất 1 site cho 1 mặt hàng");
+        }
+        ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
+
+        // Không cho sửa lựa chọn sau khi đã gửi yêu cầu (đã tạo inquiry)
+        if (!siRepo.findByProcessRequestId(requestId).isEmpty()) {
+            throw new IllegalArgumentException("Đã gửi yêu cầu hỏi tồn kho, không thể sửa lại lựa chọn site");
+        }
+
+        // Validate: mặt hàng thuộc request, và site có kinh doanh mặt hàng đó
+        List<RequestItem> items = riRepo.findByProcessRequestId(requestId);
+        Set<Integer> requestMerchIds = items.stream().map(i -> i.getMerchandise().getId()).collect(Collectors.toSet());
+        for (SitePickRequest p : picks) {
+            if (p.merchandiseId == null || p.siteId == null) {
+                throw new IllegalArgumentException("Lựa chọn không hợp lệ: thiếu mặt hàng hoặc site");
+            }
+            if (!requestMerchIds.contains(p.merchandiseId)) {
+                throw new IllegalArgumentException("Mặt hàng " + p.merchandiseId + " không thuộc request này");
+            }
+            if (smRepo.findBySiteIdAndMerchandiseId(p.siteId, p.merchandiseId).isEmpty()) {
+                throw new IllegalArgumentException("Site " + p.siteId + " không kinh doanh mặt hàng " + p.merchandiseId);
+            }
+        }
+
+        // Ghi đè toàn bộ lựa chọn cũ của request (cho phép sửa lại trước khi gửi)
+        rsRepo.deleteByProcessRequestId(requestId);
+
+        for (SitePickRequest p : picks) {
+            Merchandise merch = mRepo.findById(p.merchandiseId).orElseThrow();
+            Site site = siteRepo.findById(p.siteId).orElseThrow();
+            RequestSite rs = new RequestSite();
+            rs.setProcessRequest(pr);
+            rs.setMerchandise(merch);
+            rs.setSite(site);
+            rs.setStatus(RequestSite.SelectionStatus.PICKED);
+            rsRepo.save(rs);
+        }
+    }
+
+    @Override
+    public List<SitePickDTO> getSitePicks(Integer requestId) {
+        List<RequestItem> items = riRepo.findByProcessRequestId(requestId);
+        Map<Integer, RequestItem> itemByMerch = items.stream()
+            .collect(Collectors.toMap(i -> i.getMerchandise().getId(), i -> i, (a, b) -> a));
+
+        List<SitePickDTO> result = new ArrayList<>();
+        for (RequestSite rs : rsRepo.findByProcessRequestId(requestId)) {
+            if (rs.getSite() == null) continue; // bỏ dòng REJECTED (không có site)
+            SitePickDTO d = new SitePickDTO();
+            int merchId = rs.getMerchandise().getId();
+            d.merchandiseId = merchId;
+            d.merchandiseCode = rs.getMerchandise().getCode();
+            d.merchandiseName = rs.getMerchandise().getName();
+            RequestItem it = itemByMerch.get(merchId);
+            d.requestedQty = it != null ? it.getQuantity() : null;
+            d.unit = it != null ? it.getUnit() : null;
+            d.siteId = rs.getSite().getId();
+            d.siteCode = rs.getSite().getCode();
+            d.siteName = rs.getSite().getName();
+            d.siteCountry = rs.getSite().getCountry();
+            d.status = rs.getStatus().name();
+            result.add(d);
+        }
+        return result;
+    }
+
+    // ============================================================
     // Step 2: Gửi inquiry — mỗi site nhận danh sách mặt hàng được gán cho nó
     // ============================================================
     @Override

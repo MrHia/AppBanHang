@@ -38,6 +38,20 @@ public class ProcessRequestController {
         return ResponseEntity.ok(ApiResponse.ok("Assignments saved", null));
     }
 
+    // Multi-site: chọn nhiều site / mặt hàng để hỏi tồn kho
+    @GetMapping("/{id}/site-picks")
+    public ResponseEntity<ApiResponse<Object>> getSitePicks(@PathVariable Integer id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.getSitePicks(id)));
+    }
+
+    @PostMapping("/{id}/site-picks")
+    public ResponseEntity<ApiResponse<Object>> saveSitePicks(
+            @PathVariable Integer id,
+            @RequestBody List<SitePickRequest> picks) {
+        service.saveSitePicks(id, picks);
+        return ResponseEntity.ok(ApiResponse.ok("Site picks saved", null));
+    }
+
     // Step 2: Gửi inquiry
     @PostMapping("/{id}/send-inquiries")
     public ResponseEntity<ApiResponse<Object>> sendInquiries(@PathVariable Integer id) {

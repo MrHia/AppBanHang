@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS request_site (
     FOREIGN KEY (process_request_id) REFERENCES process_request(id) ON DELETE CASCADE,
     FOREIGN KEY (site_id) REFERENCES site(id),
     FOREIGN KEY (merchandise_id) REFERENCES merchandise(id),
-    UNIQUE KEY uk_request_site_merch (process_request_id, merchandise_id)
+    UNIQUE KEY uk_request_site_merch_site (process_request_id, merchandise_id, site_id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
 
 -- Xóa cột selected_merchandise_ids cũ (không còn dùng nữa)

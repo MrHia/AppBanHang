@@ -44,7 +44,7 @@ function ProcessRequestList() {
                 <TableCell>{r.desiredDate}</TableCell>
                 <TableCell><Chip label={statusLabel[r.status] || r.status} size="small" color="warning" /></TableCell>
                 <TableCell>
-                  <Button size="small" variant="contained" onClick={() => router.push(`/overseas/process-request/${r.id}`)}>
+                  <Button size="small" variant="contained" onClick={() => router.push(`/overseas/order-matrix/${r.id}`)}>
                     {t('overseas.processRequests.process')}
                   </Button>
                 </TableCell>
