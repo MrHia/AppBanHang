@@ -49,7 +49,7 @@ function SitePOsContent() {
           <TableBody>
             {pos.map(p => (
               <TableRow key={p.id} hover>
-                <TableCell sx={{ fontFamily: 'monospace' }}>{p.code}</TableCell><TableCell>{p.deliveryMethod}</TableCell><TableCell>{p.expectedDelivery}</TableCell>
+                <TableCell sx={{ fontFamily: 'monospace' }}>{p.code}</TableCell><TableCell>{p.deliveryMethod}</TableCell><TableCell>{p.status === 'SENT' ? (p.expectedDelivery || '—') : '—'}</TableCell>
                 <TableCell><Chip label={statusLabel[p.status] || p.status} size="small" color={statusColor[p.status] || 'default'} /></TableCell>
                 <TableCell>{p.status === 'SENT' && <><Button size="small" color="success" onClick={() => handleConfirm(p.id)}>{t('site.purchaseOrders.confirm')}</Button><Button size="small" color="error" onClick={() => { setRejectId(p.id); setRejectOpen(true); }}>{t('site.purchaseOrders.reject')}</Button></>}</TableCell>
               </TableRow>

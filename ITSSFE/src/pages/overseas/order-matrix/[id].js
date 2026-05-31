@@ -22,7 +22,7 @@ import HourglassEmptyIcon from '@mui/icons-material/HourglassEmpty';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { useRouter } from 'next/router';
-import { requestApi, inquiryApi, siteMerchandiseApi } from 'src/api';
+import { requestApi, inquiryApi, siteMerchandiseApi, poApi } from 'src/api';
 
 const C = {
   okBg: '#F0FDF4', ok: '#059669', warnBg: '#FFFBEB', warn: '#D97706',
@@ -98,8 +98,28 @@ function Step1Row({ item, candidateSites, selectedSiteIds, onToggle, defaultOpen
 }
 
 // ============================ BƯỚC 2: dòng site ============================
-function SiteSubRow({ site, cell, value, unit, onChange }) {
+function SiteSubRow({ site, cell, value, unit, ordered, onChange }) {
   const { state, quantity } = cell;
+  // ĐÃ tạo PO cho ô này → khoá ô nhập, chỉ hiện số đã đặt (read-only)
+  if (ordered > 0) {
+    return (
+      <TableRow sx={{ bgcolor: '#EFF6FF' }}>
+        <TableCell sx={{ pl: 6, borderBottom: 'none' }}>
+          <Typography variant="body2" fontWeight={700} sx={{ fontFamily: 'monospace' }}>{site.code}</Typography>
+          <Typography variant="caption" color="text.secondary">{site.name}{site.country ? ` · ${site.country}` : ''}</Typography>
+        </TableCell>
+        <TableCell align="center" sx={{ borderBottom: 'none' }}>
+          <Typography variant="body2" fontWeight={800} sx={{ color: C.ok }}>{quantity != null ? quantity : '—'}</Typography>
+        </TableCell>
+        <TableCell align="center" sx={{ borderBottom: 'none' }}>
+          <Chip size="small" label={`Đã đặt ${ordered} ${unit}`} sx={{ height: 22, fontSize: '0.72rem', bgcolor: '#DBEAFE', color: '#1E40AF', fontWeight: 700 }} />
+        </TableCell>
+        <TableCell align="center" sx={{ borderBottom: 'none' }}>
+          <Typography variant="caption" color="text.secondary">đã tạo PO</Typography>
+        </TableCell>
+      </TableRow>
+    );
+  }
   if (state === 'PENDING') {
     return (
       <TableRow sx={{ bgcolor: C.pendBg }}>
@@ -142,10 +162,12 @@ function SiteSubRow({ site, cell, value, unit, onChange }) {
   );
 }
 
-function Step2Row({ item, sites, matrix, orderMap, onQty, defaultOpen }) {
+function Step2Row({ item, sites, matrix, orderMap, orderedByMerch, onQty, defaultOpen }) {
   const [open, setOpen] = React.useState(!!defaultOpen);
   const mine = orderMap[item.merchandiseId] || {};
-  const chosen = Object.values(mine).reduce((s, v) => s + (v || 0), 0);
+  const ordered = orderedByMerch[item.merchandiseId] || {};
+  // tổng "đã chọn đặt" = số ĐÃ đặt (PO) + số đang nhập
+  const chosen = Object.values(ordered).reduce((s, v) => s + (v || 0), 0) + Object.values(mine).reduce((s, v) => s + (v || 0), 0);
   const cells = sites.map(s => ({ site: s, cell: cellStateFromMatrix(matrix[s.id]?.[item.merchandiseId]) }));
   const respondedCnt = cells.filter(c => c.cell.state !== 'PENDING').length;
   const pendingCnt = cells.length - respondedCnt;
@@ -181,6 +203,7 @@ function Step2Row({ item, sites, matrix, orderMap, onQty, defaultOpen }) {
                 <TableBody>
                   {cells.map(({ site, cell }) => (
                     <SiteSubRow key={site.id} site={site} cell={cell} unit={item.unit || ''} value={mine[site.id] || 0}
+                      ordered={ordered[site.id] || 0}
                       onChange={(sid, raw) => onQty(item.merchandiseId, sid, raw, cell.quantity || 0)} />
                   ))}
                 </TableBody>
@@ -207,7 +230,8 @@ function OrderMatrixContent() {
 
   const [step, setStep] = React.useState(0);
   const [selected, setSelected] = React.useState({});   // {merchId: [siteId,...]} — Bước 1
-  const [orderMap, setOrderMap] = React.useState({});   // {merchId: {siteId: qty}} — Bước 2
+  const [orderMap, setOrderMap] = React.useState({});   // {merchId: {siteId: qty}} — Bước 2 (đang nhập)
+  const [orderedMap, setOrderedMap] = React.useState({}); // {merchId: {siteId: qty}} — ĐÃ tạo PO (khoá)
   const [loading, setLoading] = React.useState(true);
   const [refreshing, setRefreshing] = React.useState(false);
   const [submitting, setSubmitting] = React.useState(false);
@@ -217,12 +241,26 @@ function OrderMatrixContent() {
   const sentAlready = picks.some(p => p.status !== 'PICKED');
 
   const loadStep2 = React.useCallback(async (rid) => {
-    const [st, mx] = await Promise.all([
+    const [st, mx, pos] = await Promise.all([
       requestApi.getInquiryStatus(rid).catch(() => ({})),
       inquiryApi.getMatrix(rid).catch(() => ({})),
+      poApi.getByRequest(rid).catch(() => []),
     ]);
     setStatusMap((st && typeof st === 'object' && !Array.isArray(st)) ? st : {});
     setMatrix((mx && typeof mx === 'object' && !Array.isArray(mx)) ? mx : {});
+
+    // Số đã ĐẶT (đã tạo PO) theo từng (mặt hàng × site) → để khoá ô + hiển thị
+    const posArr = Array.isArray(pos) ? pos : (Array.isArray(pos?.data) ? pos.data : []);
+    const om = {};
+    await Promise.all(posArr.map(async (po) => {
+      const det = await poApi.getDetails(po.id).catch(() => []);
+      const dets = Array.isArray(det) ? det : (Array.isArray(det?.data) ? det.data : []);
+      dets.forEach(d => {
+        if (!om[d.merchandiseId]) om[d.merchandiseId] = {};
+        om[d.merchandiseId][po.siteId] = (om[d.merchandiseId][po.siteId] || 0) + (d.quantity || 0);
+      });
+    }));
+    setOrderedMap(om);
   }, []);
 
   const loadAll = React.useCallback(async (rid, isRefresh) => {
@@ -339,6 +377,7 @@ function OrderMatrixContent() {
       const n = Array.isArray(res) ? res.length : poSites;
       setToast(`Đã tạo ${n} Purchase Order.`);
       setOrderMap({});
+      await loadStep2(id); // nạp lại → các ô vừa đặt sẽ khoá và hiện "Đã đặt X"
     } catch (e) {
       setError(e?.data?.message || e?.message || 'Tạo PO thất bại');
     } finally { setSubmitting(false); }
@@ -440,7 +479,7 @@ function OrderMatrixContent() {
               <TableBody>
                 {items.map((item, i) => (
                   <Step2Row key={item.merchandiseId} item={item} sites={picksByMerch[item.merchandiseId] || []}
-                    matrix={matrix} orderMap={orderMap} onQty={handleQty} defaultOpen={i === 0} />
+                    matrix={matrix} orderMap={orderMap} orderedByMerch={orderedMap} onQty={handleQty} defaultOpen={i === 0} />
                 ))}
               </TableBody>
             </Table></TableContainer>

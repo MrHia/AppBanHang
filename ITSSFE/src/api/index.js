@@ -77,6 +77,7 @@ export const requestApi = {
   addItem: (id, data) => wrap('post', `/requests/${id}/items`, data),
   removeItem: (id) => wrap('delete', `/requests/items/${id}`),
   submit: (id) => wrap('post', `/requests/${id}/submit`),
+  updateStatus: (id, status) => wrap('put', `/requests/${id}/status?status=${encodeURIComponent(status)}`),
 
   // Step 1: Gán site cho mỗi mặt hàng (1 site / 1 mặt hàng)
   getMerchandiseAssignments: (id) => wrap('get', `/requests/${id}/merchandise-assignments`),
@@ -97,7 +98,7 @@ export const requestApi = {
 export const inquiryApi = {
   getAll: () => wrap('get', '/inquiries'),
   getByRequest: (id) => wrap('get', `/inquiries/request/${id}`),
-  getPendingForSite: (siteId) => wrap('get', `/inquiries/pending/site/${siteId}`),
+  getPendingForSite: (siteId) => wrap('get', `/inquiries/site/${siteId}/pending`),
   getById: (id) => wrap('get', `/inquiries/${id}`),
   getItems: (id) => wrap('get', `/inquiries/${id}/items`),
   createForRequest: (id) => wrap('post', `/inquiries/request/${id}/create`),
@@ -127,6 +128,7 @@ export const warehouseApi = {
   getReceiptItems: (id) => wrap('get', `/warehouse/receipt/${id}/items`),
   confirmReceipt: (id, items) => wrap('post', `/warehouse/receipt/${id}/confirm`, items),
   getDiscrepancies: (id) => wrap('get', `/warehouse/receipt/${id}/discrepancies`),
+  getAllDiscrepancies: () => wrap('get', '/warehouse/discrepancies'),
   resolveDiscrepancy: (id, notes, resolvedBy) => wrap('post', `/warehouse/discrepancy/${id}/resolve?notes=${encodeURIComponent(notes || '')}&resolvedBy=${resolvedBy}`),
 };
 

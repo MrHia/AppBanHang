@@ -23,6 +23,8 @@ const menuItems = {
     { labelKey: 'nav.accountManagement', icon: <PeopleIcon />, href: '/admin/accounts' },
     { labelKey: 'nav.siteManagement', icon: <StoreIcon />, href: '/admin/sites' },
     { labelKey: 'nav.merchandiseManagement', icon: <InventoryIcon />, href: '/admin/merchandise' },
+    { labelKey: 'nav.orderRequests', icon: <AssignmentIcon />, href: '/admin/order-requests' },
+    { labelKey: 'nav.purchaseOrders', icon: <LocalShippingIcon />, href: '/admin/purchase-orders' },
   ],
   OVERSEAS: [
     { labelKey: 'nav.dashboard', icon: <DashboardIcon />, href: '/overseas/dashboard' },
@@ -40,7 +42,6 @@ const menuItems = {
   WAREHOUSE: [
     { labelKey: 'nav.dashboard', icon: <DashboardIcon />, href: '/warehouse/dashboard' },
     { labelKey: 'nav.confirmedOrders', icon: <LocalShippingIcon />, href: '/warehouse/confirmed-pos' },
-    { labelKey: 'nav.receiveGoods', icon: <WarehouseIcon />, href: '/warehouse/receive' },
     { labelKey: 'nav.handleDiscrepancies', icon: <AssignmentIcon />, href: '/warehouse/discrepancies' },
   ],
   SALES: [

@@ -2,7 +2,7 @@ import * as React from 'react';
 import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Chip } from '@mui/material';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
-import { siteApi } from 'src/api';
+import { siteApi, siteMerchandiseApi } from 'src/api';
 import Alert from '@mui/material/Alert';
 import { useTranslation } from 'src/i18n/useTranslation';
 
@@ -12,6 +12,16 @@ function SitesContent() {
   const [open, setOpen] = React.useState(false);
   const [form, setForm] = React.useState({ code: '', name: '', country: '', email: '', phone: '', address: '' });
   const [alert, setAlert] = React.useState('');
+  // xem các mặt hàng 1 site kinh doanh
+  const [prodOpen, setProdOpen] = React.useState(false);
+  const [prodSite, setProdSite] = React.useState(null);
+  const [products, setProducts] = React.useState([]);
+
+  const openProducts = async (site) => {
+    setProdSite(site); setProducts([]); setProdOpen(true);
+    try { const r = await siteMerchandiseApi.getBySite(site.id); setProducts(Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : [])); }
+    catch (e) { console.error(e); }
+  };
 
   const load = React.useCallback(() => siteApi.getAll().then(r => setSites(Array.isArray(r?.data) ? r.data : (Array.isArray(r) ? r : []))).catch(console.error), []);
   React.useEffect(() => { load(); }, [load]);
@@ -36,7 +46,7 @@ function SitesContent() {
       <TableContainer component={Paper}>
         <Table>
           <TableHead sx={{ bgcolor: '#F9FAFB' }}>
-            <TableRow><TableCell sx={{ fontWeight: 600 }}>{t('common.code')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.name')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.sites.country')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.email')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell></TableRow>
+            <TableRow><TableCell sx={{ fontWeight: 600 }}>{t('common.code')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.name')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.sites.country')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.email')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell><TableCell sx={{ fontWeight: 600 }}>Sản phẩm</TableCell></TableRow>
           </TableHead>
           <TableBody>
             {sites.map(s => (
@@ -46,6 +56,7 @@ function SitesContent() {
                 <TableCell>{s.country}</TableCell>
                 <TableCell>{s.email}</TableCell>
                 <TableCell><Chip label={s.isActive ? t('status.active') : t('status.inactive')} size="small" color={s.isActive ? 'success' : 'default'} /></TableCell>
+                <TableCell><Button size="small" variant="outlined" onClick={() => openProducts(s)}>Xem sản phẩm</Button></TableCell>
               </TableRow>
             ))}
           </TableBody>
@@ -61,6 +72,28 @@ function SitesContent() {
           <TextField fullWidth label={t('admin.sites.address')} value={form.address} onChange={e => setForm({...form, address: e.target.value})} margin="dense" multiline rows={2} />
         </DialogContent>
         <DialogActions><Button onClick={() => setOpen(false)}>{t('common.cancel')}</Button><Button variant="contained" onClick={handleSave}>{t('common.save')}</Button></DialogActions>
+      </Dialog>
+
+      {/* Dialog: sản phẩm của site */}
+      <Dialog open={prodOpen} onClose={() => setProdOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Sản phẩm site {prodSite?.code} kinh doanh</DialogTitle>
+        <DialogContent dividers>
+          <Table size="small">
+            <TableHead><TableRow><TableCell sx={{ fontWeight: 600 }}>Mã</TableCell><TableCell sx={{ fontWeight: 600 }}>Tên</TableCell><TableCell sx={{ fontWeight: 600 }}>ĐV</TableCell><TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell></TableRow></TableHead>
+            <TableBody>
+              {products.map(p => (
+                <TableRow key={p.id}>
+                  <TableCell sx={{ fontFamily: 'monospace' }}>{p.merchandiseCode}</TableCell>
+                  <TableCell>{p.merchandiseName}</TableCell>
+                  <TableCell>{p.unit || '—'}</TableCell>
+                  <TableCell><Chip size="small" label={p.isActive ? 'Đang KD' : 'Ngừng'} color={p.isActive ? 'success' : 'default'} /></TableCell>
+                </TableRow>
+              ))}
+              {products.length === 0 && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3 }}>Site này chưa kinh doanh mặt hàng nào.</TableCell></TableRow>}
+            </TableBody>
+          </Table>
+        </DialogContent>
+        <DialogActions><Button onClick={() => setProdOpen(false)}>Đóng</Button></DialogActions>
       </Dialog>
     </Container>
   );

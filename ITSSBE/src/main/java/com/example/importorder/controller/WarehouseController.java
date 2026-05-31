@@ -18,5 +18,6 @@ public class WarehouseController {
     @GetMapping("/receipt/{receiptId}/items") public ResponseEntity<ApiResponse<Object>> getReceiptItems(@PathVariable Integer receiptId) { return ResponseEntity.ok(ApiResponse.ok(service.getReceiptItems(receiptId))); }
     @PostMapping("/receipt/{receiptId}/confirm") public ResponseEntity<ApiResponse<Object>> confirmReceipt(@PathVariable Integer receiptId, @RequestBody List<ReceiptItemDTO> items) { return ResponseEntity.ok(ApiResponse.ok(service.receiveWithDetail(receiptId, items))); }
     @GetMapping("/receipt/{receiptId}/discrepancies") public ResponseEntity<ApiResponse<Object>> getDiscrepancies(@PathVariable Integer receiptId) { return ResponseEntity.ok(ApiResponse.ok(service.getDiscrepancies(receiptId))); }
+    @GetMapping("/discrepancies") public ResponseEntity<ApiResponse<Object>> getAllDiscrepancies() { return ResponseEntity.ok(ApiResponse.ok(service.getAllDiscrepancies())); }
     @PostMapping("/discrepancy/{id}/resolve") public ResponseEntity<ApiResponse<Object>> resolve(@PathVariable Integer id, @RequestParam String notes, @RequestParam Integer resolvedBy) { service.resolveDiscrepancy(id, notes, resolvedBy); return ResponseEntity.ok(ApiResponse.ok("Discrepancy resolved", null)); }
 }

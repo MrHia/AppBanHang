@@ -1,0 +1,34 @@
+# Build & chạy backend + MySQL bằng Docker (không cần cài Java/MySQL trên máy).
+#   docker compose up --build      → dựng DB (seed từ SQL/schema.sql) + backend (port 8081)
+#   docker compose down -v         → dừng & xoá luôn dữ liệu DB
+services:
+  db:
+    # MySQL 8 để khớp driver mysql-connector-j trong pom. schema.sql được nạp qua
+    # script init (lược bỏ 1 dòng MariaDB-only) — xem SQL/docker-mysql-init.sh.
+    image: mysql:8.0
+    environment:
+      MYSQL_ALLOW_EMPTY_PASSWORD: "yes"
+      MYSQL_DATABASE: import_order_system
+    # Cổng 3307 trên host (3306 đã bị game gamecotuong dùng). IntelliJ nối localhost:3307.
+    ports:
+      - "3307:3306"
+    volumes:
+      - ./SQL/schema.sql:/schema-src/schema.sql:ro
+      - ./SQL/docker-mysql-init.sh:/docker-entrypoint-initdb.d/01-init.sh:ro
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost"]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  backend:
+    build: ./ITSSBE
+    environment:
+      SPRING_DATASOURCE_URL: jdbc:mysql://db:3306/import_order_system?allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+      SPRING_DATASOURCE_USERNAME: root
+      SPRING_DATASOURCE_PASSWORD: ""
+    ports:
+      - "8081:8081"
+    depends_on:
+      db:
+        condition: service_healthy

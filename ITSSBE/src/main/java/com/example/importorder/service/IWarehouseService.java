@@ -9,6 +9,8 @@ public interface IWarehouseService {
     List<ReceiptItemDTO> getReceiptItems(Integer receiptId);
     WarehouseReceiptDTO receiveWithDetail(Integer receiptId, List<ReceiptItemDTO> items);
     List<SiteDiscrepancyDTO> getDiscrepancies(Integer receiptId);
+    // Tất cả chênh lệch (mọi receipt) — kèm poCode/siteName, mới nhất trước
+    List<SiteDiscrepancyDTO> getAllDiscrepancies();
     void resolveDiscrepancy(Integer id, String notes, Integer resolvedById);
     List<SiteDiscrepancyDTO> getDiscrepanciesBySite(Integer siteId);
 }

@@ -100,6 +100,11 @@ public class WarehouseServiceImpl implements IWarehouseService {
     @Transactional
     public WarehouseReceiptDTO receiveGoods(Integer poId, Integer receivedById) {
         PurchaseOrder po = poRepo.findById(poId).orElseThrow(() -> new RuntimeException("Purchase order not found"));
+        // Idempotent: nếu PO đã có phiếu nhận thì DÙNG LẠI, không tạo mới
+        // (chống spam bấm "Nhận hàng" tạo nhiều phiếu / nhiều discrepancy).
+        List<WarehouseReceipt> existing = wrRepo.findByPurchaseOrderId(poId);
+        if (!existing.isEmpty()) return toDTO(existing.get(0));
+
         Account receiver = accRepo.findById(receivedById).orElseThrow(() -> new RuntimeException("Account not found"));
         WarehouseReceipt wr = new WarehouseReceipt();
         wr.setPurchaseOrder(po);
@@ -127,6 +132,11 @@ public class WarehouseServiceImpl implements IWarehouseService {
     @Transactional
     public WarehouseReceiptDTO receiveWithDetail(Integer receiptId, List<ReceiptItemDTO> items) {
         WarehouseReceipt wr = wrRepo.findById(receiptId).orElseThrow();
+        // Chặn xác nhận lặp: chỉ cho xác nhận khi phiếu còn PENDING
+        // (nếu không, spam nút "Xác nhận" sẽ tạo discrepancy + notification site nhiều lần).
+        if (wr.getStatus() != WarehouseReceipt.ReceiptStatus.PENDING) {
+            throw new RuntimeException("Phiếu nhận đã được xác nhận trước đó, không thể xác nhận lại");
+        }
         boolean hasDiscrepancy = false;
         String poCode = wr.getPurchaseOrder().getCode();
 
@@ -168,14 +178,51 @@ public class WarehouseServiceImpl implements IWarehouseService {
             }
         }
 
-        wr.setStatus(hasDiscrepancy ? WarehouseReceipt.ReceiptStatus.RESOLVING : WarehouseReceipt.ReceiptStatus.DONE);
-        wrRepo.save(wr);
+        if (hasDiscrepancy) {
+            wr.setStatus(WarehouseReceipt.ReceiptStatus.RESOLVING);
+            wrRepo.save(wr);
+        } else {
+            // Nhận đủ, không chênh lệch → đóng phiếu VÀ đóng đơn PO luôn
+            wr.setStatus(WarehouseReceipt.ReceiptStatus.DONE);
+            wrRepo.save(wr);
+            PurchaseOrder po = wr.getPurchaseOrder();
+            po.setStatus(PurchaseOrder.POStatus.DONE);
+            poRepo.save(po);
+            notificationService.createNotification(
+                "WAREHOUSE",
+                "PO đã hoàn tất - " + poCode,
+                "PO #" + poCode + " đã nhận đủ hàng, không chênh lệch. Đơn đã đóng (DONE).",
+                "purchase_order", po.getId()
+            );
+        }
         return toDTO(wr);
     }
 
     @Override
     public List<SiteDiscrepancyDTO> getDiscrepancies(Integer receiptId) {
         return discRepo.findByWarehouseReceiptId(receiptId).stream().map(this::toDiscDTO).toList();
+    }
+
+    @Override
+    public List<SiteDiscrepancyDTO> getAllDiscrepancies() {
+        List<SiteDiscrepancyDTO> result = new ArrayList<>();
+        for (SiteDiscrepancy sd : discRepo.findAll()) {
+            SiteDiscrepancyDTO d = toDiscDTO(sd);
+            WarehouseReceipt wr = sd.getWarehouseReceipt();
+            if (wr != null && wr.getPurchaseOrder() != null) {
+                d.poCode = wr.getPurchaseOrder().getCode();
+                if (wr.getPurchaseOrder().getProcessRequest() != null) d.processRequestCode = wr.getPurchaseOrder().getProcessRequest().getCode();
+                if (wr.getPurchaseOrder().getSite() != null) d.siteName = wr.getPurchaseOrder().getSite().getName();
+                // lấy số đặt / thực nhận từ receipt item khớp mặt hàng
+                riRepo.findByWarehouseReceiptId(wr.getId()).stream()
+                    .filter(ri -> ri.getMerchandise().getId().equals(sd.getMerchandise().getId()))
+                    .findFirst()
+                    .ifPresent(ri -> { d.orderedQuantity = ri.getOrderedQuantity(); d.receivedQuantity = ri.getReceivedQuantity(); });
+            }
+            result.add(d);
+        }
+        result.sort((a, b) -> Integer.compare(b.id, a.id)); // mới nhất trước
+        return result;
     }
 
     @Override

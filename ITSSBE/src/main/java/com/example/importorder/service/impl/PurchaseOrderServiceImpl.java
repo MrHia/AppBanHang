@@ -121,6 +121,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
         if (dto.expectedDelivery != null) po.setExpectedDelivery(LocalDate.parse(dto.expectedDelivery));
         if (dto.deliveryMethod != null) po.setDeliveryMethod(PurchaseOrder.DeliveryMethod.valueOf(dto.deliveryMethod));
+        if (dto.status != null) po.setStatus(PurchaseOrder.POStatus.valueOf(dto.status)); // admin can thiệp status
         poRepo.save(po);
         return toDTO(po);
     }
