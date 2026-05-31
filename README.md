@@ -155,3 +155,5 @@ CREATE TABLE IF NOT EXISTS notification (
 ```
 
 The `PasswordMigrationRunner` will auto-migrate existing plain-text passwords to BCrypt on first startup.
+
+....
