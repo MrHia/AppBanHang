@@ -9,4 +9,6 @@ public class SiteDTO {
     public String phone;
     public String address;
     public Boolean isActive;
+    public String generatedEmail;
+    public String generatedPassword;
 }

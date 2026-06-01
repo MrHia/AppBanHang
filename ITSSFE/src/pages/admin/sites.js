@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Chip } from '@mui/material';
+import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Chip, IconButton, Tooltip } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { siteApi, siteMerchandiseApi } from 'src/api';
@@ -16,6 +17,9 @@ function SitesContent() {
   const [prodOpen, setProdOpen] = React.useState(false);
   const [prodSite, setProdSite] = React.useState(null);
   const [products, setProducts] = React.useState([]);
+  // hiển thị tài khoản/mật khẩu tạm thời sau khi tạo site
+  const [credOpen, setCredOpen] = React.useState(false);
+  const [credInfo, setCredInfo] = React.useState(null);
 
   const openProducts = async (site) => {
     setProdSite(site); setProducts([]); setProdOpen(true);
@@ -23,14 +27,38 @@ function SitesContent() {
     catch (e) { console.error(e); }
   };
 
+  const reloadProducts = async (siteId) => {
+    try { const r = await siteMerchandiseApi.getBySite(siteId); setProducts(Array.isArray(r) ? r : (Array.isArray(r?.data) ? r.data : [])); }
+    catch (e) { console.error(e); }
+  };
+
+  const handleRemoveProduct = async (p) => {
+    if (!prodSite) return;
+    const ok = window.confirm(`Xoá mặt hàng "${p.merchandiseName}" khỏi site ${prodSite.code}?`);
+    if (!ok) return;
+    try {
+      await siteMerchandiseApi.removeMerchandise(p.id);
+      await reloadProducts(prodSite.id);
+    } catch (err) {
+      window.alert(typeof err === 'string' ? err : (err?.message || 'Xoá thất bại'));
+    }
+  };
+
   const load = React.useCallback(() => siteApi.getAll().then(r => setSites(Array.isArray(r?.data) ? r.data : (Array.isArray(r) ? r : []))).catch(console.error), []);
   React.useEffect(() => { load(); }, [load]);
   React.useEffect(() => { const interval = setInterval(load, 15000); return () => clearInterval(interval); }, [load]);
 
   const handleSave = async () => {
+    if (!form.code?.trim()) { setAlert('Vui lòng nhập mã site (ví dụ: SITE-VN-001)'); return; }
     try {
-      await siteApi.create(form);
-      setAlert(t('admin.sites.siteCreated'));
+      const res = await siteApi.create(form);
+      const data = res?.data || res;
+      if (data?.generatedEmail && data?.generatedPassword) {
+        setCredInfo({ siteName: data.name || form.name, email: data.generatedEmail, password: data.generatedPassword });
+        setCredOpen(true);
+      } else {
+        setAlert(t('admin.sites.siteCreated'));
+      }
       setOpen(false);
       load();
     } catch (err) { setAlert(typeof err === 'string' ? err : (err?.message || t('common.error'))); }
@@ -65,6 +93,7 @@ function SitesContent() {
       <Dialog open={open} onClose={() => setOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{t('admin.sites.addNewSite')}</DialogTitle>
         <DialogContent>
+          <TextField fullWidth required label={t('common.code')} value={form.code} onChange={e => setForm({...form, code: e.target.value.toUpperCase()})} margin="dense" placeholder="SITE-VN-001" helperText="Mã site duy nhất, tài khoản đăng nhập sẽ là {code}@site.com" />
           <TextField fullWidth label={t('admin.sites.siteName')} value={form.name} onChange={e => setForm({...form, name: e.target.value})} margin="dense" />
           <TextField fullWidth label={t('admin.sites.country')} value={form.country} onChange={e => setForm({...form, country: e.target.value})} margin="dense" />
           <TextField fullWidth label={t('common.email')} value={form.email} onChange={e => setForm({...form, email: e.target.value})} margin="dense" />
@@ -74,12 +103,33 @@ function SitesContent() {
         <DialogActions><Button onClick={() => setOpen(false)}>{t('common.cancel')}</Button><Button variant="contained" onClick={handleSave}>{t('common.save')}</Button></DialogActions>
       </Dialog>
 
+      {/* Dialog: hiển thị tài khoản + mật khẩu tạm thời sau khi tạo site */}
+      <Dialog open={credOpen} onClose={() => setCredOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Tạo site thành công</DialogTitle>
+        <DialogContent dividers>
+          <Alert severity="success" sx={{ mb: 2 }}>
+            Đã tạo site <b>{credInfo?.siteName}</b> kèm tài khoản đăng nhập. Vui lòng lưu lại thông tin bên dưới — mật khẩu sẽ không hiển thị lại.
+          </Alert>
+          <Box sx={{ bgcolor: '#F4F6F8', p: 2, borderRadius: 1, fontFamily: 'monospace' }}>
+            <Box sx={{ mb: 1 }}><b>Email:</b> {credInfo?.email}</Box>
+            <Box><b>Mật khẩu tạm thời:</b> {credInfo?.password}</Box>
+          </Box>
+          <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
+            Site sẽ được yêu cầu đổi mật khẩu trong lần đăng nhập đầu tiên. Email cũng đã được gửi tới địa chỉ liên hệ của site.
+          </Typography>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => { navigator.clipboard?.writeText(`Email: ${credInfo?.email}\nMật khẩu: ${credInfo?.password}`); }}>Copy</Button>
+          <Button variant="contained" onClick={() => setCredOpen(false)}>Đã lưu</Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Dialog: sản phẩm của site */}
       <Dialog open={prodOpen} onClose={() => setProdOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>Sản phẩm site {prodSite?.code} kinh doanh</DialogTitle>
         <DialogContent dividers>
           <Table size="small">
-            <TableHead><TableRow><TableCell sx={{ fontWeight: 600 }}>Mã</TableCell><TableCell sx={{ fontWeight: 600 }}>Tên</TableCell><TableCell sx={{ fontWeight: 600 }}>ĐV</TableCell><TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell></TableRow></TableHead>
+            <TableHead><TableRow><TableCell sx={{ fontWeight: 600 }}>Mã</TableCell><TableCell sx={{ fontWeight: 600 }}>Tên</TableCell><TableCell sx={{ fontWeight: 600 }}>ĐV</TableCell><TableCell sx={{ fontWeight: 600 }}>Trạng thái</TableCell><TableCell sx={{ fontWeight: 600 }} align="right">Thao tác</TableCell></TableRow></TableHead>
             <TableBody>
               {products.map(p => (
                 <TableRow key={p.id}>
@@ -87,9 +137,20 @@ function SitesContent() {
                   <TableCell>{p.merchandiseName}</TableCell>
                   <TableCell>{p.unit || '—'}</TableCell>
                   <TableCell><Chip size="small" label={p.isActive ? 'Đang KD' : 'Ngừng'} color={p.isActive ? 'success' : 'default'} /></TableCell>
+                  <TableCell align="right">
+                    {p.isActive ? (
+                      <Tooltip title="Xoá mặt hàng khỏi site">
+                        <IconButton size="small" color="error" onClick={() => handleRemoveProduct(p)}>
+                          <DeleteIcon fontSize="small" />
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      <Typography variant="caption" color="text.disabled">Đã xoá</Typography>
+                    )}
+                  </TableCell>
                 </TableRow>
               ))}
-              {products.length === 0 && <TableRow><TableCell colSpan={4} align="center" sx={{ py: 3 }}>Site này chưa kinh doanh mặt hàng nào.</TableCell></TableRow>}
+              {products.length === 0 && <TableRow><TableCell colSpan={5} align="center" sx={{ py: 3 }}>Site này chưa kinh doanh mặt hàng nào.</TableCell></TableRow>}
             </TableBody>
           </Table>
         </DialogContent>

@@ -78,7 +78,10 @@ public class SiteServiceImpl implements ISiteService {
         // SRS UC3: Send email notification to the new Site
         emailService.sendSiteCreatedEmail(acc.getEmail(), dto.name, tempPassword);
 
-        return toDTO(s);
+        SiteDTO result = toDTO(s);
+        result.generatedEmail = acc.getEmail();
+        result.generatedPassword = tempPassword;
+        return result;
     }
 
     private String generateTempPassword(int length) {
