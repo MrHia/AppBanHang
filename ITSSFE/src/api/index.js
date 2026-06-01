@@ -66,6 +66,7 @@ export const merchandiseApi = {
   getById: (id) => wrap('get', `/merchandise/${id}`),
   create: (data) => wrap('post', '/merchandise', data),
   update: (id, data) => wrap('put', `/merchandise/${id}`, data),
+  deactivate: (id) => wrap('delete', `/merchandise/${id}`),
 };
 
 export const requestApi = {

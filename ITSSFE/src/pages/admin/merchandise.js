@@ -1,5 +1,6 @@
 import * as React from 'react';
-import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Chip } from '@mui/material';
+import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Button, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Box, Chip, IconButton, Tooltip } from '@mui/material';
+import DeleteIcon from '@mui/icons-material/Delete';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { merchandiseApi } from 'src/api';
@@ -22,6 +23,18 @@ function MerchandiseContent() {
     catch (err) { setAlert(typeof err === 'string' ? err : (err?.message || t('common.error'))); }
   };
 
+  const handleDelete = async (m) => {
+    const ok = window.confirm(`Ngừng kinh doanh mặt hàng "${m.name}" (${m.code})?\n\nTất cả site đang KD mặt hàng này cũng sẽ ngừng.`);
+    if (!ok) return;
+    try {
+      await merchandiseApi.deactivate(m.id);
+      setAlert(`Đã ngừng kinh doanh ${m.code}`);
+      load();
+    } catch (err) {
+      setAlert(typeof err === 'string' ? err : (err?.message || 'Xoá thất bại'));
+    }
+  };
+
   return (
     <Container maxWidth="xl">
       <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 2, mt: 2 }}>
@@ -32,7 +45,7 @@ function MerchandiseContent() {
       <TableContainer component={Paper}>
         <Table>
           <TableHead sx={{ bgcolor: '#F9FAFB' }}>
-            <TableRow><TableCell sx={{ fontWeight: 600 }}>{t('common.code')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.name')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.merchandise.unit')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.merchandise.description')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell></TableRow>
+            <TableRow><TableCell sx={{ fontWeight: 600 }}>{t('common.code')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('common.name')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.merchandise.unit')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('admin.merchandise.description')}</TableCell><TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell><TableCell sx={{ fontWeight: 600 }} align="right">Thao tác</TableCell></TableRow>
           </TableHead>
           <TableBody>
             {items.map(m => (
@@ -42,6 +55,17 @@ function MerchandiseContent() {
                 <TableCell>{m.unit}</TableCell>
                 <TableCell>{m.description}</TableCell>
                 <TableCell><Chip label={m.isActive ? t('status.active') : t('status.inactive')} size="small" color={m.isActive ? 'success' : 'default'} /></TableCell>
+                <TableCell align="right">
+                  {m.isActive ? (
+                    <Tooltip title="Ngừng kinh doanh mặt hàng này">
+                      <IconButton size="small" color="error" onClick={() => handleDelete(m)}>
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </Tooltip>
+                  ) : (
+                    <Typography variant="caption" color="text.disabled">Đã ngừng</Typography>
+                  )}
+                </TableCell>
               </TableRow>
             ))}
           </TableBody>

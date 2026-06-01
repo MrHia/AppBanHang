@@ -8,4 +8,5 @@ public interface IMerchandiseService {
     MerchandiseDTO getById(Integer id);
     MerchandiseDTO create(MerchandiseDTO dto);
     MerchandiseDTO update(Integer id, MerchandiseDTO dto);
+    void deactivate(Integer id);
 }
