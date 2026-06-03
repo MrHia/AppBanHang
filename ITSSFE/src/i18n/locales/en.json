@@ -349,8 +349,19 @@
       "resolved": "Discrepancy resolved",
       "noDiscrepancies": "No discrepancies found",
       "id": "ID",
-      "poCode": "PO",
-      "site": "Site"
+      "poCode": "PO Code",
+      "site": "Site",
+      "noReqCode": "(no REQ)",
+      "discrepancyCount": "{count} discrepancies",
+      "pendingCount": "{count} pending",
+      "allResolved": "All resolved",
+      "ordered": "Ordered",
+      "actualReceived": "Actual Received",
+      "process": "Process",
+      "processed": "Processed",
+      "groupedHint": "Discrepancies grouped by request code (REQ). Open each REQ to view details by PO and resolve.",
+      "requestCode": "Request Code (REQ)",
+      "discrepancyCountLabel": "Discrepancy Count"
     }
   },
   "sales": {

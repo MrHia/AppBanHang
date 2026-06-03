@@ -30,6 +30,34 @@ api.interceptors.response.use(
   }
 );
 
+/**
+ * Normalize axios response into the actual payload.
+ *
+ * The axios response interceptor above already unwraps the BE's ApiResponse
+ * shape ({ success, message, data } -> data) and strips axios's outer { data }
+ * envelope, so in practice callers receive the payload directly. This helper
+ * is a defensive fallback for consumers that still need to handle either an
+ * already-unwrapped value or a raw axios-like envelope without sprinkling
+ * `r?.data || r` patterns throughout the codebase.
+ *
+ * Behaviour:
+ *  - null/undefined -> returned as-is
+ *  - Arrays -> returned as-is (already a payload)
+ *  - Objects shaped like { success, data, ... } -> returns `.data`
+ *  - Anything else -> returned as-is
+ *
+ * @template T
+ * @param {T | { data: T, success?: boolean }} res
+ * @returns {T}
+ */
+export const normalizeResponse = (res) => {
+  if (res == null) return res;
+  // Already unwrapped by interceptor or raw
+  if (Array.isArray(res)) return res;
+  if (res?.data !== undefined && res?.success !== undefined) return res.data; // ApiResponse-like
+  return res;
+};
+
 const wrap = (method, path, data, params) => {
   const req = { method, url: path, headers: getAuthHeader() };
   if (data) req.data = data;

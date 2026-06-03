@@ -335,7 +335,7 @@
     },
     "discrepancies": {
       "title": "Xử lý chênh lệch",
-      "merchandise": "Hàng hóa",
+      "merchandise": "Mặt hàng",
       "expectedQty": "SL dự kiến",
       "receivedQty": "SL nhận",
       "discrepancy": "Chênh lệch",
@@ -345,7 +345,20 @@
       "confirmResolution": "Xác nhận giải quyết",
       "resolved": "Đã giải quyết chênh lệch",
       "noDiscrepancies": "Không có chênh lệch nào",
-      "resolutionNotesPlaceholder": "Nhập ghi chú giải quyết..."
+      "resolutionNotesPlaceholder": "Nhập ghi chú giải quyết...",
+      "noReqCode": "(không có REQ)",
+      "discrepancyCount": "{count} chênh lệch",
+      "pendingCount": "{count} chờ xử lý",
+      "allResolved": "Đã xử lý hết",
+      "poCode": "Mã PO",
+      "site": "Site",
+      "ordered": "Đặt",
+      "actualReceived": "Thực nhận",
+      "process": "Xử lý",
+      "processed": "Đã xử lý",
+      "groupedHint": "Chênh lệch nhóm theo mã yêu cầu (REQ). Mở từng REQ để xem chi tiết theo PO và xử lý.",
+      "requestCode": "Mã yêu cầu (REQ)",
+      "discrepancyCountLabel": "Số chênh lệch"
     }
   },
   "sales": {

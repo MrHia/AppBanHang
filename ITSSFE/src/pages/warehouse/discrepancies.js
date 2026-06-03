@@ -25,18 +25,19 @@ const getDiscDisplay = (d) => d.shortage > 0 ? `-${d.shortage}` : d.excess > 0 ?
 
 // Một nhóm REQ (dropdown) chứa các chênh lệch
 function ReqGroup({ reqCode, discs, defaultOpen, onResolve }) {
+  const { t } = useTranslation();
   const [open, setOpen] = React.useState(!!defaultOpen);
   const openCount = discs.filter(d => d.status !== 'RESOLVED').length;
   return (
     <>
       <TableRow hover sx={{ cursor: 'pointer', bgcolor: '#F8FAFC', '& > td': { borderBottom: '1px solid #E2E8F0' } }} onClick={() => setOpen(o => !o)}>
         <TableCell sx={{ width: 48 }}><IconButton size="small">{open ? <KeyboardArrowDownIcon /> : <KeyboardArrowRightIcon />}</IconButton></TableCell>
-        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main' }}>{reqCode || '(không có REQ)'}</TableCell>
-        <TableCell>{discs.length} chênh lệch</TableCell>
+        <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700, color: 'primary.main' }}>{reqCode || t('warehouse.discrepancies.noReqCode')}</TableCell>
+        <TableCell>{t('warehouse.discrepancies.discrepancyCount').replace('{count}', discs.length)}</TableCell>
         <TableCell>
           {openCount > 0
-            ? <Chip size="small" color="error" label={`${openCount} chờ xử lý`} />
-            : <Chip size="small" color="success" label="Đã xử lý hết" />}
+            ? <Chip size="small" color="error" label={t('warehouse.discrepancies.pendingCount').replace('{count}', openCount)} />
+            : <Chip size="small" color="success" label={t('warehouse.discrepancies.allResolved')} />}
         </TableCell>
       </TableRow>
       <TableRow>
@@ -46,14 +47,14 @@ function ReqGroup({ reqCode, discs, defaultOpen, onResolve }) {
               <Table size="small">
                 <TableHead>
                   <TableRow>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>Mã PO</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>Site</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>Mặt hàng</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">Đặt</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">Thực nhận</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">Chênh lệch</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>Trạng thái</TableCell>
-                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="right">Thao tác</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>{t('warehouse.discrepancies.poCode')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>{t('warehouse.discrepancies.site')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>{t('warehouse.discrepancies.merchandise')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">{t('warehouse.discrepancies.ordered')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">{t('warehouse.discrepancies.actualReceived')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="center">{t('warehouse.discrepancies.discrepancy')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }}>{t('status.label')}</TableCell>
+                    <TableCell sx={{ fontWeight: 700, color: 'text.secondary' }} align="right">{t('common.actions')}</TableCell>
                   </TableRow>
                 </TableHead>
                 <TableBody>
@@ -68,8 +69,8 @@ function ReqGroup({ reqCode, discs, defaultOpen, onResolve }) {
                       <TableCell><Chip size="small" label={d.status} color={statusColor(d.status)} /></TableCell>
                       <TableCell align="right">
                         {d.status !== 'RESOLVED'
-                          ? <Button size="small" variant="contained" onClick={() => onResolve(d)}>Xử lý</Button>
-                          : <Typography variant="caption" color="success.main">Đã xử lý</Typography>}
+                          ? <Button size="small" variant="contained" onClick={() => onResolve(d)}>{t('warehouse.discrepancies.process')}</Button>
+                          : <Typography variant="caption" color="success.main">{t('warehouse.discrepancies.processed')}</Typography>}
                       </TableCell>
                     </TableRow>
                   ))}
@@ -133,7 +134,7 @@ function DiscrepanciesContent() {
         <Typography variant="h4" sx={{ fontWeight: 700 }}>{t('warehouse.discrepancies.title')}</Typography>
         <Button variant="outlined" onClick={loadData}>{t('common.refresh')}</Button>
       </Box>
-      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>Chênh lệch nhóm theo mã yêu cầu (REQ). Mở từng REQ để xem chi tiết theo PO và xử lý.</Typography>
+      <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>{t('warehouse.discrepancies.groupedHint')}</Typography>
 
       {alert && <Alert severity="success" sx={{ mb: 2 }} onClose={() => setAlert('')}>{alert}</Alert>}
 
@@ -142,9 +143,9 @@ function DiscrepanciesContent() {
           <TableHead sx={{ bgcolor: '#F9FAFB' }}>
             <TableRow>
               <TableCell sx={{ width: 48 }} />
-              <TableCell sx={{ fontWeight: 600 }}>Mã yêu cầu (REQ)</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Số chênh lệch</TableCell>
-              <TableCell sx={{ fontWeight: 600 }}>Tình trạng</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('warehouse.discrepancies.requestCode')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('warehouse.discrepancies.discrepancyCountLabel')}</TableCell>
+              <TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
