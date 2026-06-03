@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.ProcessRequestMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -28,6 +29,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     private final PODetailRepository podRepo;
     private final IAuditService auditService;
     private final IStockInquiryService inquiryService;
+    private final ProcessRequestMapper mapper;
 
     public ProcessRequestServiceImpl(
             ProcessRequestRepository prRepo, RequestItemRepository riRepo,
@@ -36,57 +38,29 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             RequestSiteRepository rsRepo, StockInquiryRepository siRepo,
             StockInquiryItemRepository siiRepo, PurchaseOrderRepository poRepo,
             PODetailRepository podRepo, IAuditService auditService,
-            IStockInquiryService inquiryService) {
+            IStockInquiryService inquiryService, ProcessRequestMapper mapper) {
         this.prRepo = prRepo; this.riRepo = riRepo; this.mRepo = mRepo;
         this.accRepo = accRepo; this.siteRepo = siteRepo; this.smRepo = smRepo;
         this.rsRepo = rsRepo; this.siRepo = siRepo; this.siiRepo = siiRepo;
         this.poRepo = poRepo; this.podRepo = podRepo; this.auditService = auditService;
-        this.inquiryService = inquiryService;
+        this.inquiryService = inquiryService; this.mapper = mapper;
     }
 
-    private ProcessRequestDTO toDTO(ProcessRequest pr) {
-        ProcessRequestDTO d = new ProcessRequestDTO();
-        d.id = pr.getId(); d.code = pr.getCode();
-        d.desiredDate = pr.getDesiredDate() != null ? pr.getDesiredDate().toString() : null;
-        d.notes = pr.getNotes(); d.status = pr.getStatus().name();
-        d.createdById = pr.getCreatedBy() != null ? pr.getCreatedBy().getId() : null;
-        d.createdByName = pr.getCreatedBy() != null ? pr.getCreatedBy().getFirstName() + " " + pr.getCreatedBy().getLastName() : null;
-        d.createdAt = pr.getCreatedAt() != null ? pr.getCreatedAt().toString() : null;
-        d.itemCount = pr.getRequestItems() != null ? pr.getRequestItems().size() : riRepo.findByProcessRequestId(pr.getId()).size();
-        return d;
-    }
-
-    private RequestItemDTO toItemDTO(RequestItem ri) {
-        RequestItemDTO d = new RequestItemDTO();
-        d.id = ri.getId(); d.processRequestId = ri.getProcessRequest().getId();
-        d.merchandiseId = ri.getMerchandise().getId();
-        d.merchandiseCode = ri.getMerchandise().getCode();
-        d.merchandiseName = ri.getMerchandise().getName();
-        d.quantity = ri.getQuantity(); d.unit = ri.getUnit();
-        return d;
-    }
-
-    private RequestSiteDTO toRequestSiteDTO(RequestSite rs) {
-        RequestSiteDTO d = new RequestSiteDTO();
-        d.id = rs.getId();
-        d.processRequestId = rs.getProcessRequest().getId();
-        if (rs.getSite() != null) {
-            d.siteId = rs.getSite().getId();
-            d.siteCode = rs.getSite().getCode();
-            d.siteName = rs.getSite().getName();
-            d.siteCountry = rs.getSite().getCountry();
+    /**
+     * Wrap mapper với fallback itemCount: nếu requestItems chưa được fetch (lazy),
+     * query riRepo để đếm.
+     */
+    private ProcessRequestDTO toDTOWithItemCount(ProcessRequest pr) {
+        ProcessRequestDTO d = mapper.toDTO(pr);
+        if (d.itemCount == 0 && pr.getRequestItems() == null) {
+            d.itemCount = riRepo.findByProcessRequestId(pr.getId()).size();
         }
-        d.merchandiseId = rs.getMerchandise().getId();
-        d.merchandiseCode = rs.getMerchandise().getCode();
-        d.status = rs.getStatus().name();
-        d.rejectReason = rs.getRejectReason();
-        d.createdAt = rs.getCreatedAt() != null ? rs.getCreatedAt().toString() : null;
         return d;
     }
 
-    @Override public List<ProcessRequestDTO> getAll() { return prRepo.findAll().stream().map(this::toDTO).toList(); }
-    @Override public ProcessRequestDTO getById(Integer id) { return toDTO(prRepo.findByIdWithItems(id).orElseThrow()); }
-    @Override public List<RequestItemDTO> getItems(Integer requestId) { return riRepo.findByProcessRequestId(requestId).stream().map(this::toItemDTO).toList(); }
+    @Override public List<ProcessRequestDTO> getAll() { return prRepo.findAll().stream().map(this::toDTOWithItemCount).toList(); }
+    @Override public ProcessRequestDTO getById(Integer id) { return toDTOWithItemCount(prRepo.findByIdWithItems(id).orElseThrow()); }
+    @Override public List<RequestItemDTO> getItems(Integer requestId) { return mapper.toItemDTOList(riRepo.findByProcessRequestId(requestId)); }
 
     @Override
     @Transactional
@@ -108,7 +82,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         pr.setCreatedBy(creator);
         prRepo.save(pr);
         auditService.log(createdById, "CREATE_REQUEST", "process_request", pr.getId(), "Created: " + code);
-        return toDTO(pr);
+        return toDTOWithItemCount(pr);
     }
 
     @Override
@@ -153,7 +127,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
     @Override
     public List<ProcessRequestDTO> getByStatus(String status) {
-        return prRepo.findByStatus(ProcessRequest.RequestStatus.valueOf(status)).stream().map(this::toDTO).toList();
+        return prRepo.findByStatus(ProcessRequest.RequestStatus.valueOf(status)).stream().map(this::toDTOWithItemCount).toList();
     }
 
     // ============================================================
@@ -201,72 +175,78 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     @Override
     @Transactional
     public void saveMerchandiseAssignments(Integer requestId, List<MerchandisePickRequest> assignments) {
+        validateNonEmpty(assignments);
+
+        ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
+        Set<Integer> requestMerchIds = collectRequestMerchandiseIds(requestId);
+
+        validateNoDuplicates(assignments);
+        validateCompleteness(assignments, requestMerchIds);
+        validateMembership(assignments, requestMerchIds);
+
+        for (MerchandisePickRequest asg : assignments) {
+            applyAssignment(pr, asg, requestId);
+        }
+    }
+
+    private void validateNonEmpty(List<MerchandisePickRequest> assignments) {
         if (assignments == null || assignments.isEmpty()) {
             throw new IllegalArgumentException("Phải có ít nhất 1 lựa chọn");
         }
+    }
 
-        ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
-        List<RequestItem> items = riRepo.findByProcessRequestId(requestId);
-        Set<Integer> requestMerchIds = items.stream().map(i -> i.getMerchandise().getId()).collect(Collectors.toSet());
-
-        // Validate: mỗi merch trong request phải có đúng 1 assignment
-        Set<Integer> assignedMerchIds = assignments.stream()
-            .filter(a -> a.siteId != null)
-            .map(a -> a.merchandiseId)
+    private Set<Integer> collectRequestMerchandiseIds(Integer requestId) {
+        return riRepo.findByProcessRequestId(requestId).stream()
+            .map(i -> i.getMerchandise().getId())
             .collect(Collectors.toSet());
+    }
 
-        // Các merch không được assign site = bị reject
-        Set<Integer> rejectedMerchIds = assignments.stream()
-            .filter(a -> a.siteId == null)
-            .map(a -> a.merchandiseId)
-            .collect(Collectors.toSet());
-
-        // Kiểm tra không trùng merch (1 merch chỉ xuất hiện 1 lần)
-        if (assignments.stream().map(a -> a.merchandiseId).distinct().count() != assignments.size()) {
+    private void validateNoDuplicates(List<MerchandisePickRequest> assignments) {
+        long distinctCount = assignments.stream().map(a -> a.merchandiseId).distinct().count();
+        if (distinctCount != assignments.size()) {
             throw new IllegalArgumentException("Mỗi mặt hàng chỉ được phép xuất hiện 1 lần trong danh sách lựa chọn");
         }
+    }
 
-        // Kiểm tra đủ: mỗi mặt hàng trong request phải có trong assignments
-        Set<Integer> allAssignmentMerchIds = assignments.stream()
-            .map(a -> a.merchandiseId)
-            .collect(Collectors.toSet());
-        if (!allAssignmentMerchIds.equals(requestMerchIds)) {
+    private void validateCompleteness(List<MerchandisePickRequest> assignments, Set<Integer> requestMerchIds) {
+        Set<Integer> allIds = assignments.stream().map(a -> a.merchandiseId).collect(Collectors.toSet());
+        if (!allIds.equals(requestMerchIds)) {
             Set<Integer> missing = new HashSet<>(requestMerchIds);
-            missing.removeAll(allAssignmentMerchIds);
+            missing.removeAll(allIds);
             throw new IllegalArgumentException("Thiếu mặt hàng trong danh sách lựa chọn: " + missing);
         }
+    }
 
+    private void validateMembership(List<MerchandisePickRequest> assignments, Set<Integer> requestMerchIds) {
         for (MerchandisePickRequest asg : assignments) {
             if (!requestMerchIds.contains(asg.merchandiseId)) {
                 throw new IllegalArgumentException("Mặt hàng " + asg.merchandiseId + " không thuộc request này");
             }
         }
+    }
 
-        for (MerchandisePickRequest asg : assignments) {
-            Merchandise merch = mRepo.findById(asg.merchandiseId).orElseThrow();
-            Optional<RequestSite> existingOpt = rsRepo.findByProcessRequestIdAndMerchandiseId(requestId, asg.merchandiseId);
-            RequestSite rs = existingOpt.orElse(new RequestSite());
+    private void applyAssignment(ProcessRequest pr, MerchandisePickRequest asg, Integer requestId) {
+        Merchandise merch = mRepo.findById(asg.merchandiseId).orElseThrow();
+        RequestSite rs = rsRepo.findByProcessRequestIdAndMerchandiseId(requestId, asg.merchandiseId)
+            .orElse(new RequestSite());
 
-            rs.setProcessRequest(pr);
-            rs.setMerchandise(merch);
+        rs.setProcessRequest(pr);
+        rs.setMerchandise(merch);
 
-            if (asg.siteId != null) {
-                Site site = siteRepo.findById(asg.siteId).orElseThrow();
-                rs.setSite(site);
-                rs.setStatus(RequestSite.SelectionStatus.PICKED);
-                rs.setRejectReason(null);
-            } else {
-                // Từ chối mặt hàng này
-                if (asg.rejectReason == null || asg.rejectReason.isBlank()) {
-                    throw new IllegalArgumentException("Khi từ chối mặt hàng '" + merch.getCode()
-                        + "' phải nhập lý do");
-                }
-                rs.setSite(null);
-                rs.setStatus(RequestSite.SelectionStatus.REJECTED);
-                rs.setRejectReason(asg.rejectReason);
+        if (asg.siteId != null) {
+            Site site = siteRepo.findById(asg.siteId).orElseThrow();
+            rs.setSite(site);
+            rs.setStatus(RequestSite.SelectionStatus.PICKED);
+            rs.setRejectReason(null);
+        } else {
+            if (asg.rejectReason == null || asg.rejectReason.isBlank()) {
+                throw new IllegalArgumentException("Khi từ chối mặt hàng '" + merch.getCode() + "' phải nhập lý do");
             }
-            rsRepo.save(rs);
+            rs.setSite(null);
+            rs.setStatus(RequestSite.SelectionStatus.REJECTED);
+            rs.setRejectReason(asg.rejectReason);
         }
+        rsRepo.save(rs);
     }
 
     @Override

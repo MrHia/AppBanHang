@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.AuthMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -16,11 +17,14 @@ public class AuthServiceImpl implements IAuthService {
     private final AccountRepository accountRepository;
     private final RoleRepository roleRepository;
     private final PasswordEncoder passwordEncoder;
+    private final AuthMapper authMapper;
 
-    public AuthServiceImpl(AccountRepository accountRepository, RoleRepository roleRepository, PasswordEncoder passwordEncoder) {
+    public AuthServiceImpl(AccountRepository accountRepository, RoleRepository roleRepository,
+            PasswordEncoder passwordEncoder, AuthMapper authMapper) {
         this.accountRepository = accountRepository;
         this.roleRepository = roleRepository;
         this.passwordEncoder = passwordEncoder;
+        this.authMapper = authMapper;
     }
 
     @Override
@@ -54,17 +58,9 @@ public class AuthServiceImpl implements IAuthService {
         account.setLockedUntil(null);
         accountRepository.save(account);
 
-        LoginResponse resp = new LoginResponse();
-        resp.id = account.getId();
-        resp.email = account.getEmail();
-        resp.firstName = account.getFirstName();
-        resp.lastName = account.getLastName();
-        resp.roleName = account.getRole().getName();
-        resp.siteId = account.getSite() != null ? account.getSite().getId() : null;
-        resp.siteCode = account.getSite() != null ? account.getSite().getCode() : null;
+        LoginResponse resp = authMapper.toLoginResponse(account);
         resp.token = UUID.randomUUID().toString();
         resp.loginAt = LocalDateTime.now();
-        resp.mustChangePassword = account.getMustChangePassword() != null && account.getMustChangePassword();
         return resp;
     }
 

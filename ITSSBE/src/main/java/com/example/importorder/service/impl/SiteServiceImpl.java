@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.SiteMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -18,32 +19,22 @@ public class SiteServiceImpl implements ISiteService {
     private final IAuditService auditService;
     private final IEmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final SiteMapper mapper;
 
     public SiteServiceImpl(SiteRepository siteRepo, AccountRepository accountRepo, RoleRepository roleRepo,
-            IAuditService auditService, IEmailService emailService, PasswordEncoder passwordEncoder) {
+            IAuditService auditService, IEmailService emailService, PasswordEncoder passwordEncoder,
+            SiteMapper mapper) {
         this.siteRepo = siteRepo;
         this.accountRepo = accountRepo;
         this.roleRepo = roleRepo;
         this.auditService = auditService;
         this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
+        this.mapper = mapper;
     }
 
-    private SiteDTO toDTO(Site s) {
-        SiteDTO d = new SiteDTO();
-        d.id = s.getId();
-        d.code = s.getCode();
-        d.name = s.getName();
-        d.country = s.getCountry();
-        d.email = s.getEmail();
-        d.phone = s.getPhone();
-        d.address = s.getAddress();
-        d.isActive = s.getIsActive();
-        return d;
-    }
-
-    @Override public List<SiteDTO> getAll() { return siteRepo.findAll().stream().map(this::toDTO).toList(); }
-    @Override public SiteDTO getById(Integer id) { return toDTO(siteRepo.findById(id).orElseThrow()); }
+    @Override public List<SiteDTO> getAll() { return mapper.toDTOList(siteRepo.findAll()); }
+    @Override public SiteDTO getById(Integer id) { return mapper.toDTO(siteRepo.findById(id).orElseThrow()); }
 
     @Override
     @Transactional
@@ -78,7 +69,7 @@ public class SiteServiceImpl implements ISiteService {
         // SRS UC3: Send email notification to the new Site
         emailService.sendSiteCreatedEmail(acc.getEmail(), dto.name, tempPassword);
 
-        SiteDTO result = toDTO(s);
+        SiteDTO result = mapper.toDTO(s);
         result.generatedEmail = acc.getEmail();
         result.generatedPassword = tempPassword;
         return result;
@@ -102,7 +93,7 @@ public class SiteServiceImpl implements ISiteService {
         if (dto.phone != null) s.setPhone(dto.phone);
         if (dto.address != null) s.setAddress(dto.address);
         siteRepo.save(s);
-        return toDTO(s);
+        return mapper.toDTO(s);
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.NotificationMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -12,21 +13,19 @@ import java.util.*;
 public class NotificationServiceImpl implements INotificationService {
 
     private final NotificationRepository notificationRepo;
+    private final NotificationMapper mapper;
 
-    public NotificationServiceImpl(NotificationRepository notificationRepo) {
+    public NotificationServiceImpl(NotificationRepository notificationRepo, NotificationMapper mapper) {
         this.notificationRepo = notificationRepo;
+        this.mapper = mapper;
     }
 
-    private NotificationDTO toDTO(Notification n) {
-        NotificationDTO d = new NotificationDTO();
-        d.id = n.getId();
-        d.recipientRole = n.getRecipientRole();
-        d.title = n.getTitle();
-        d.message = n.getMessage();
-        d.isRead = n.getIsRead();
-        d.entityType = n.getEntityType();
-        d.entityId = n.getEntityId();
-        d.createdAt = n.getCreatedAt() != null ? n.getCreatedAt().toString() : null;
+    /**
+     * Mapper xử lý pure transformation, còn unreadCount cần query DB nên set ở service layer
+     * (giữ Mapper "thin" — SRP: mapper chỉ map field, không truy DB).
+     */
+    private NotificationDTO toDTOWithUnreadCount(Notification n) {
+        NotificationDTO d = mapper.toDTO(n);
         d.unreadCount = notificationRepo.countByRecipientRoleAndIsReadFalse(n.getRecipientRole());
         return d;
     }
@@ -46,12 +45,12 @@ public class NotificationServiceImpl implements INotificationService {
 
     @Override
     public List<NotificationDTO> getNotificationsByRole(String role) {
-        return notificationRepo.findByRecipientRoleOrderByCreatedAtDesc(role).stream().map(this::toDTO).toList();
+        return notificationRepo.findByRecipientRoleOrderByCreatedAtDesc(role).stream().map(this::toDTOWithUnreadCount).toList();
     }
 
     @Override
     public List<NotificationDTO> getUnreadByRole(String role) {
-        return notificationRepo.findUnreadByRole(role).stream().map(this::toDTO).toList();
+        return notificationRepo.findUnreadByRole(role).stream().map(this::toDTOWithUnreadCount).toList();
     }
 
     @Override

@@ -1,5 +1,8 @@
 package com.example.importorder.dto;
 
+import lombok.Data;
+
+@Data
 public class ProcessRequestDTO {
     public Integer id;
     public String code;

@@ -2,6 +2,8 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.PurchaseOrderMapper;
+import com.example.importorder.mapper.WarehouseMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -21,11 +23,14 @@ public class WarehouseServiceImpl implements IWarehouseService {
     private final AccountRepository accRepo;
     private final INotificationService notificationService;
     private final IEmailService emailService;
+    private final WarehouseMapper mapper;
+    private final PurchaseOrderMapper poMapper;
 
     public WarehouseServiceImpl(WarehouseReceiptRepository wrRepo, ReceiptItemRepository riRepo,
             PODetailRepository podRepo, PurchaseOrderRepository poRepo,
             SiteDiscrepancyRepository discRepo, DiscrepancyMessageRepository msgRepo,
-            AccountRepository accRepo, INotificationService notificationService, IEmailService emailService) {
+            AccountRepository accRepo, INotificationService notificationService, IEmailService emailService,
+            WarehouseMapper mapper, PurchaseOrderMapper poMapper) {
         this.wrRepo = wrRepo;
         this.riRepo = riRepo;
         this.podRepo = podRepo;
@@ -35,65 +40,18 @@ public class WarehouseServiceImpl implements IWarehouseService {
         this.accRepo = accRepo;
         this.notificationService = notificationService;
         this.emailService = emailService;
-    }
-
-    private WarehouseReceiptDTO toDTO(WarehouseReceipt wr) {
-        WarehouseReceiptDTO d = new WarehouseReceiptDTO();
-        d.id = wr.getId();
-        d.purchaseOrderId = wr.getPurchaseOrder().getId();
-        d.purchaseOrderCode = wr.getPurchaseOrder().getCode();
-        d.receivedAt = wr.getReceivedAt() != null ? wr.getReceivedAt().toString() : null;
-        d.receivedById = wr.getReceivedBy().getId();
-        d.receivedByName = wr.getReceivedBy().getFirstName() + " " + wr.getReceivedBy().getLastName();
-        d.status = wr.getStatus().name();
-        return d;
-    }
-
-    private ReceiptItemDTO toReceiptDTO(ReceiptItem ri) {
-        ReceiptItemDTO d = new ReceiptItemDTO();
-        d.id = ri.getId();
-        d.warehouseReceiptId = ri.getWarehouseReceipt().getId();
-        d.merchandiseId = ri.getMerchandise().getId();
-        d.merchandiseName = ri.getMerchandise().getName();
-        d.orderedQuantity = ri.getOrderedQuantity();
-        d.receivedQuantity = ri.getReceivedQuantity();
-        return d;
-    }
-
-    private SiteDiscrepancyDTO toDiscDTO(SiteDiscrepancy sd) {
-        SiteDiscrepancyDTO d = new SiteDiscrepancyDTO();
-        d.id = sd.getId();
-        d.warehouseReceiptId = sd.getWarehouseReceipt().getId();
-        d.merchandiseId = sd.getMerchandise().getId();
-        d.merchandiseName = sd.getMerchandise().getName();
-        d.shortage = sd.getShortage();
-        d.excess = sd.getExcess();
-        d.resolutionNotes = sd.getResolutionNotes();
-        d.status = sd.getStatus().name();
-        d.resolvedById = sd.getResolvedBy() != null ? sd.getResolvedBy().getId() : null;
-        d.resolvedByName = sd.getResolvedBy() != null
-            ? sd.getResolvedBy().getFirstName() + " " + sd.getResolvedBy().getLastName()
-            : null;
-        d.resolvedAt = sd.getResolvedAt() != null ? sd.getResolvedAt().toString() : null;
-        return d;
+        this.mapper = mapper;
+        this.poMapper = poMapper;
     }
 
     @Override
     public List<PurchaseOrderDTO> getConfirmedPOs() {
-        return poRepo.findAll().stream()
-            .filter(po -> "CONFIRMED".equals(po.getStatus().name()))
-            .map(po -> {
-                PurchaseOrderDTO d = new PurchaseOrderDTO();
-                d.id = po.getId();
-                d.code = po.getCode();
-                d.siteId = po.getSite().getId();
-                d.siteCode = po.getSite().getCode();
-                d.siteName = po.getSite().getName();
-                d.expectedDelivery = po.getExpectedDelivery() != null ? po.getExpectedDelivery().toString() : null;
-                d.status = po.getStatus().name();
-                d.deliveryMethod = po.getDeliveryMethod().name();
-                return d;
-            }).toList();
+        // SRP — feature envy fix: dùng PurchaseOrderMapper thay vì inline DTO mapping ở đây.
+        return poMapper.toDTOList(
+            poRepo.findAll().stream()
+                .filter(po -> po.getStatus() == PurchaseOrder.POStatus.CONFIRMED)
+                .toList()
+        );
     }
 
     @Override
@@ -103,7 +61,7 @@ public class WarehouseServiceImpl implements IWarehouseService {
         // Idempotent: nếu PO đã có phiếu nhận thì DÙNG LẠI, không tạo mới
         // (chống spam bấm "Nhận hàng" tạo nhiều phiếu / nhiều discrepancy).
         List<WarehouseReceipt> existing = wrRepo.findByPurchaseOrderId(poId);
-        if (!existing.isEmpty()) return toDTO(existing.get(0));
+        if (!existing.isEmpty()) return mapper.toDTO(existing.get(0));
 
         Account receiver = accRepo.findById(receivedById).orElseThrow(() -> new RuntimeException("Account not found"));
         WarehouseReceipt wr = new WarehouseReceipt();
@@ -120,12 +78,12 @@ public class WarehouseServiceImpl implements IWarehouseService {
             ri.setReceivedQuantity(0);
             riRepo.save(ri);
         }
-        return toDTO(wr);
+        return mapper.toDTO(wr);
     }
 
     @Override
     public List<ReceiptItemDTO> getReceiptItems(Integer receiptId) {
-        return riRepo.findByWarehouseReceiptId(receiptId).stream().map(this::toReceiptDTO).toList();
+        return mapper.toReceiptItemDTOList(riRepo.findByWarehouseReceiptId(receiptId));
     }
 
     @Override
@@ -195,19 +153,21 @@ public class WarehouseServiceImpl implements IWarehouseService {
                 "purchase_order", po.getId()
             );
         }
-        return toDTO(wr);
+        return mapper.toDTO(wr);
     }
 
     @Override
     public List<SiteDiscrepancyDTO> getDiscrepancies(Integer receiptId) {
-        return discRepo.findByWarehouseReceiptId(receiptId).stream().map(this::toDiscDTO).toList();
+        return mapper.toDiscrepancyDTOList(discRepo.findByWarehouseReceiptId(receiptId));
     }
 
     @Override
     public List<SiteDiscrepancyDTO> getAllDiscrepancies() {
         List<SiteDiscrepancyDTO> result = new ArrayList<>();
         for (SiteDiscrepancy sd : discRepo.findAll()) {
-            SiteDiscrepancyDTO d = toDiscDTO(sd);
+            // Mapper xử lý base fields, service compose cross-aggregate fields (poCode, processRequestCode,
+            // siteName, orderedQuantity, receivedQuantity) — đây là "view query" cross multiple aggregates.
+            SiteDiscrepancyDTO d = mapper.toDiscrepancyDTO(sd);
             WarehouseReceipt wr = sd.getWarehouseReceipt();
             if (wr != null && wr.getPurchaseOrder() != null) {
                 d.poCode = wr.getPurchaseOrder().getCode();
@@ -227,7 +187,7 @@ public class WarehouseServiceImpl implements IWarehouseService {
 
     @Override
     public List<SiteDiscrepancyDTO> getDiscrepanciesBySite(Integer siteId) {
-        return discRepo.findBySiteId(siteId).stream().map(this::toDiscDTO).toList();
+        return mapper.toDiscrepancyDTOList(discRepo.findBySiteId(siteId));
     }
 
     @Override

@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.AccountMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -17,34 +18,21 @@ public class AccountServiceImpl implements IAccountService {
     private final IAuditService auditService;
     private final IEmailService emailService;
     private final PasswordEncoder passwordEncoder;
+    private final AccountMapper mapper;
 
     public AccountServiceImpl(AccountRepository accountRepository, RoleRepository roleRepository,
-            IAuditService auditService, IEmailService emailService, PasswordEncoder passwordEncoder) {
+            IAuditService auditService, IEmailService emailService, PasswordEncoder passwordEncoder,
+            AccountMapper mapper) {
         this.accountRepository = accountRepository;
         this.roleRepository = roleRepository;
         this.auditService = auditService;
         this.emailService = emailService;
         this.passwordEncoder = passwordEncoder;
+        this.mapper = mapper;
     }
 
-    private AccountDTO toDTO(Account a) {
-        AccountDTO d = new AccountDTO();
-        d.id = a.getId();
-        d.email = a.getEmail();
-        d.firstName = a.getFirstName();
-        d.lastName = a.getLastName();
-        d.phone = a.getPhone();
-        d.isActive = a.getIsActive();
-        d.roleName = a.getRole() != null ? a.getRole().getName() : null;
-        d.siteId = a.getSite() != null ? a.getSite().getId() : null;
-        d.siteCode = a.getSite() != null ? a.getSite().getCode() : null;
-        d.mustChangePassword = a.getMustChangePassword() != null ? a.getMustChangePassword() : false;
-        d.createdAt = a.getCreatedAt() != null ? a.getCreatedAt().toString() : null;
-        return d;
-    }
-
-    @Override public List<AccountDTO> getAll() { return accountRepository.findAll().stream().map(this::toDTO).toList(); }
-    @Override public AccountDTO getById(Integer id) { return toDTO(accountRepository.findById(id).orElseThrow(() -> new RuntimeException("Account not found"))); }
+    @Override public List<AccountDTO> getAll() { return mapper.toDTOList(accountRepository.findAll()); }
+    @Override public AccountDTO getById(Integer id) { return mapper.toDTO(accountRepository.findById(id).orElseThrow(() -> new RuntimeException("Account not found"))); }
 
     @Override
     @Transactional
@@ -71,7 +59,7 @@ public class AccountServiceImpl implements IAccountService {
         // SRS UC1: send email notification with temporary password
         emailService.sendAccountCreatedEmail(dto.email, rawPassword);
 
-        return toDTO(a);
+        return mapper.toDTO(a);
     }
 
     @Override
@@ -82,7 +70,7 @@ public class AccountServiceImpl implements IAccountService {
         if (dto.lastName != null) a.setLastName(dto.lastName);
         if (dto.phone != null) a.setPhone(dto.phone);
         accountRepository.save(a);
-        return toDTO(a);
+        return mapper.toDTO(a);
     }
 
     @Override @Transactional public void delete(Integer id) { accountRepository.deleteById(id); }

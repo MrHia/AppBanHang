@@ -1,5 +1,8 @@
 package com.example.importorder.dto;
 
+import lombok.Data;
+
+@Data
 public class PODetailDTO {
     public Integer id;
     public Integer purchaseOrderId;

@@ -1,7 +1,10 @@
 package com.example.importorder.dto;
 
+import lombok.Data;
+
 import java.time.LocalDateTime;
 
+@Data
 public class LoginResponse {
     public Integer id;
     public String email;

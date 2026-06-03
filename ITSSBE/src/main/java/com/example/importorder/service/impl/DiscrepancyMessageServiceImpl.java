@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.DiscrepancyMessageMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -14,30 +15,26 @@ public class DiscrepancyMessageServiceImpl implements IDiscrepancyMessageService
     private final DiscrepancyMessageRepository msgRepo;
     private final SiteDiscrepancyRepository discRepo;
     private final AccountRepository accountRepo;
+    private final DiscrepancyMessageMapper mapper;
 
     public DiscrepancyMessageServiceImpl(DiscrepancyMessageRepository msgRepo,
-            SiteDiscrepancyRepository discRepo, AccountRepository accountRepo) {
+            SiteDiscrepancyRepository discRepo, AccountRepository accountRepo,
+            DiscrepancyMessageMapper mapper) {
         this.msgRepo = msgRepo;
         this.discRepo = discRepo;
         this.accountRepo = accountRepo;
+        this.mapper = mapper;
     }
 
-    private DiscrepancyMessageDTO toDTO(DiscrepancyMessage m) {
-        DiscrepancyMessageDTO d = new DiscrepancyMessageDTO();
-        d.id = m.getId();
-        d.discrepancyId = m.getDiscrepancy().getId();
-        d.senderType = m.getSenderType().name();
-        d.senderId = m.getSenderId();
-        d.message = m.getMessage();
-        d.sentAt = m.getSentAt() != null ? m.getSentAt().toString() : null;
-
-        if (m.getSenderType() == DiscrepancyMessage.SenderType.WAREHOUSE) {
-            d.senderName = accountRepo.findById(m.getSenderId())
-                .map(a -> a.getFirstName() + " " + a.getLastName()).orElse("Warehouse");
-        } else {
-            d.senderName = accountRepo.findById(m.getSenderId())
-                .map(a -> a.getFirstName() + " " + a.getLastName()).orElse("Site");
-        }
+    /**
+     * Mapper handle base fields; service compose senderName (lookup Account by senderId).
+     */
+    private DiscrepancyMessageDTO toDTOWithSenderName(DiscrepancyMessage m) {
+        DiscrepancyMessageDTO d = mapper.toDTO(m);
+        String fallback = m.getSenderType() == DiscrepancyMessage.SenderType.WAREHOUSE ? "Warehouse" : "Site";
+        d.senderName = accountRepo.findById(m.getSenderId())
+            .map(a -> a.getFirstName() + " " + a.getLastName())
+            .orElse(fallback);
         return d;
     }
 
@@ -61,6 +58,6 @@ public class DiscrepancyMessageServiceImpl implements IDiscrepancyMessageService
 
     @Override
     public List<DiscrepancyMessageDTO> getMessages(Integer discrepancyId) {
-        return msgRepo.findByDiscrepancyIdOrderBySentAtAsc(discrepancyId).stream().map(this::toDTO).toList();
+        return msgRepo.findByDiscrepancyIdOrderBySentAtAsc(discrepancyId).stream().map(this::toDTOWithSenderName).toList();
     }
 }

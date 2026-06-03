@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.SiteMerchandiseMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -14,28 +15,16 @@ public class SiteMerchandiseServiceImpl implements ISiteMerchandiseService {
     private final SiteMerchandiseRepository smRepo;
     private final SiteRepository siteRepo;
     private final MerchandiseRepository mRepo;
+    private final SiteMerchandiseMapper mapper;
 
-    public SiteMerchandiseServiceImpl(SiteMerchandiseRepository smRepo, SiteRepository siteRepo, MerchandiseRepository mRepo) {
-        this.smRepo = smRepo; this.siteRepo = siteRepo; this.mRepo = mRepo;
+    public SiteMerchandiseServiceImpl(SiteMerchandiseRepository smRepo, SiteRepository siteRepo,
+            MerchandiseRepository mRepo, SiteMerchandiseMapper mapper) {
+        this.smRepo = smRepo; this.siteRepo = siteRepo; this.mRepo = mRepo; this.mapper = mapper;
     }
 
-    private SiteMerchandiseDTO toDTO(SiteMerchandise sm) {
-        SiteMerchandiseDTO d = new SiteMerchandiseDTO();
-        d.id = sm.getId();
-        d.siteId = sm.getSite().getId();
-        d.siteCode = sm.getSite().getCode();
-        d.siteName = sm.getSite().getName();
-        d.merchandiseId = sm.getMerchandise().getId();
-        d.merchandiseCode = sm.getMerchandise().getCode();
-        d.merchandiseName = sm.getMerchandise().getName();
-        d.stockQuantity = sm.getStockQuantity();
-        d.isActive = sm.getIsActive();
-        return d;
-    }
-
-    @Override public List<SiteMerchandiseDTO> getAll() { return smRepo.findAll().stream().map(this::toDTO).toList(); }
-    @Override public List<SiteMerchandiseDTO> getBySite(Integer siteId) { return smRepo.findBySiteId(siteId).stream().map(this::toDTO).toList(); }
-    @Override public List<SiteMerchandiseDTO> getAvailableBySite(Integer siteId) { return smRepo.findBySiteIdAndIsActiveTrue(siteId).stream().map(this::toDTO).toList(); }
+    @Override public List<SiteMerchandiseDTO> getAll() { return mapper.toDTOList(smRepo.findAll()); }
+    @Override public List<SiteMerchandiseDTO> getBySite(Integer siteId) { return mapper.toDTOList(smRepo.findBySiteId(siteId)); }
+    @Override public List<SiteMerchandiseDTO> getAvailableBySite(Integer siteId) { return mapper.toDTOList(smRepo.findBySiteIdAndIsActiveTrue(siteId)); }
 
     @Override
     @Transactional
@@ -53,7 +42,7 @@ public class SiteMerchandiseServiceImpl implements ISiteMerchandiseService {
         sm.setStockQuantity(dto.stockQuantity != null ? dto.stockQuantity : 0);
         sm.setIsActive(true);
         smRepo.save(sm);
-        return toDTO(sm);
+        return mapper.toDTO(sm);
     }
 
     @Override
@@ -62,7 +51,7 @@ public class SiteMerchandiseServiceImpl implements ISiteMerchandiseService {
         SiteMerchandise sm = smRepo.findById(id).orElseThrow();
         sm.setStockQuantity(stockQuantity);
         smRepo.save(sm);
-        return toDTO(sm);
+        return mapper.toDTO(sm);
     }
 
     @Override

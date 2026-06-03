@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.StockInquiryMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -18,39 +19,20 @@ public class StockInquiryServiceImpl implements IStockInquiryService {
     private final ProcessRequestRepository prRepo;
     private final SiteRepository siteRepo;
     private final RequestSiteRepository rsRepo;
+    private final StockInquiryMapper mapper;
 
     public StockInquiryServiceImpl(StockInquiryRepository siRepo, StockInquiryItemRepository siiRepo,
             SiteMerchandiseRepository smRepo, ProcessRequestRepository prRepo, SiteRepository siteRepo,
-            RequestSiteRepository rsRepo) {
-        this.siRepo = siRepo; this.siiRepo = siiRepo; this.smRepo = smRepo; this.prRepo = prRepo; this.siteRepo = siteRepo; this.rsRepo = rsRepo;
+            RequestSiteRepository rsRepo, StockInquiryMapper mapper) {
+        this.siRepo = siRepo; this.siiRepo = siiRepo; this.smRepo = smRepo;
+        this.prRepo = prRepo; this.siteRepo = siteRepo; this.rsRepo = rsRepo; this.mapper = mapper;
     }
 
-    private StockInquiryDTO toDTO(StockInquiry si) {
-        StockInquiryDTO d = new StockInquiryDTO();
-        d.id = si.getId(); d.processRequestId = si.getProcessRequest().getId();
-        d.processRequestCode = si.getProcessRequest().getCode();
-        d.siteId = si.getSite().getId(); d.siteCode = si.getSite().getCode(); d.siteName = si.getSite().getName();
-        d.status = si.getStatus().name();
-        d.createdAt = si.getCreatedAt() != null ? si.getCreatedAt().toString() : null;
-        d.respondedAt = si.getRespondedAt() != null ? si.getRespondedAt().toString() : null;
-        return d;
-    }
-
-    private StockInquiryItemDTO toItemDTO(StockInquiryItem sii) {
-        StockInquiryItemDTO d = new StockInquiryItemDTO();
-        d.id = sii.getId(); d.stockInquiryId = sii.getStockInquiry().getId();
-        d.merchandiseId = sii.getMerchandise().getId();
-        d.merchandiseCode = sii.getMerchandise().getCode();
-        d.merchandiseName = sii.getMerchandise().getName();
-        d.quantity = sii.getQuantity();
-        return d;
-    }
-
-    @Override public List<StockInquiryDTO> getAll() { return siRepo.findAll().stream().map(this::toDTO).toList(); }
-    @Override public List<StockInquiryDTO> getByRequest(Integer requestId) { return siRepo.findByProcessRequestId(requestId).stream().map(this::toDTO).toList(); }
-    @Override public List<StockInquiryDTO> getPendingForSite(Integer siteId) { return siRepo.findPendingForSite(siteId).stream().map(this::toDTO).toList(); }
-    @Override public StockInquiryDTO getById(Integer id) { return toDTO(siRepo.findById(id).orElseThrow()); }
-    @Override public List<StockInquiryItemDTO> getItems(Integer inquiryId) { return siiRepo.findByStockInquiryId(inquiryId).stream().map(this::toItemDTO).toList(); }
+    @Override public List<StockInquiryDTO> getAll() { return mapper.toDTOList(siRepo.findAll()); }
+    @Override public List<StockInquiryDTO> getByRequest(Integer requestId) { return mapper.toDTOList(siRepo.findByProcessRequestId(requestId)); }
+    @Override public List<StockInquiryDTO> getPendingForSite(Integer siteId) { return mapper.toDTOList(siRepo.findPendingForSite(siteId)); }
+    @Override public StockInquiryDTO getById(Integer id) { return mapper.toDTO(siRepo.findById(id).orElseThrow()); }
+    @Override public List<StockInquiryItemDTO> getItems(Integer inquiryId) { return mapper.toItemDTOList(siiRepo.findByStockInquiryId(inquiryId)); }
 
     @Override
     @Transactional
@@ -133,7 +115,7 @@ public class StockInquiryServiceImpl implements IStockInquiryService {
         Map<Integer, Map<Integer, Integer>> inquiryStock = new HashMap<>();
         Set<Integer> respondedSiteIds = new HashSet<>();
         for (StockInquiry si : inquiries) {
-            if (!si.getStatus().name().equals("RESPONDED")) continue;
+            if (si.getStatus() != StockInquiry.InquiryStatus.RESPONDED) continue;
             respondedSiteIds.add(si.getSite().getId());
             Map<Integer, Integer> siteStock = new HashMap<>();
             for (StockInquiryItem sii : siiRepo.findByStockInquiryId(si.getId())) {

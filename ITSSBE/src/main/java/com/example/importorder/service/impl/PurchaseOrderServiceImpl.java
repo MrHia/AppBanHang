@@ -2,6 +2,7 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.mapper.PurchaseOrderMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import org.springframework.stereotype.Service;
@@ -22,11 +23,13 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
     private final IAuditService auditService;
     private final INotificationService notificationService;
     private final IEmailService emailService;
+    private final PurchaseOrderMapper mapper;
 
     public PurchaseOrderServiceImpl(PurchaseOrderRepository poRepo, PODetailRepository podRepo,
             ProcessRequestRepository prRepo, SiteRepository siteRepo,
             MerchandiseRepository mRepo, IAuditService auditService,
-            INotificationService notificationService, IEmailService emailService) {
+            INotificationService notificationService, IEmailService emailService,
+            PurchaseOrderMapper mapper) {
         this.poRepo = poRepo;
         this.podRepo = podRepo;
         this.prRepo = prRepo;
@@ -35,57 +38,28 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         this.auditService = auditService;
         this.notificationService = notificationService;
         this.emailService = emailService;
-    }
-
-    private PurchaseOrderDTO toDTO(PurchaseOrder po) {
-        PurchaseOrderDTO d = new PurchaseOrderDTO();
-        d.id = po.getId();
-        d.code = po.getCode();
-        d.processRequestId = po.getProcessRequest() != null ? po.getProcessRequest().getId() : null;
-        d.processRequestCode = po.getProcessRequest() != null ? po.getProcessRequest().getCode() : null;
-        d.siteId = po.getSite().getId();
-        d.siteCode = po.getSite().getCode();
-        d.siteName = po.getSite().getName();
-        d.status = po.getStatus().name();
-        d.deliveryMethod = po.getDeliveryMethod().name();
-        d.expectedDelivery = po.getExpectedDelivery() != null ? po.getExpectedDelivery().toString() : null;
-        d.rejectionReason = po.getRejectionReason();
-        d.createdAt = po.getCreatedAt() != null ? po.getCreatedAt().toString() : null;
-        d.confirmedAt = po.getConfirmedAt() != null ? po.getConfirmedAt().toString() : null;
-        return d;
-    }
-
-    private PODetailDTO toDetailDTO(PODetail pod) {
-        PODetailDTO d = new PODetailDTO();
-        d.id = pod.getId();
-        d.purchaseOrderId = pod.getPurchaseOrder().getId();
-        d.merchandiseId = pod.getMerchandise().getId();
-        d.merchandiseCode = pod.getMerchandise().getCode();
-        d.merchandiseName = pod.getMerchandise().getName();
-        d.quantity = pod.getQuantity();
-        d.unit = pod.getUnit();
-        return d;
+        this.mapper = mapper;
     }
 
     @Override
-    public List<PurchaseOrderDTO> getAll() { return poRepo.findAll().stream().map(this::toDTO).toList(); }
+    public List<PurchaseOrderDTO> getAll() { return mapper.toDTOList(poRepo.findAll()); }
 
     @Override
     public List<PurchaseOrderDTO> getBySite(Integer siteId) {
-        return poRepo.findBySiteId(siteId).stream().map(this::toDTO).toList();
+        return mapper.toDTOList(poRepo.findBySiteId(siteId));
     }
 
     @Override
     public List<PurchaseOrderDTO> getByRequest(Integer requestId) {
-        return poRepo.findByProcessRequestId(requestId).stream().map(this::toDTO).toList();
+        return mapper.toDTOList(poRepo.findByProcessRequestId(requestId));
     }
 
     @Override
-    public PurchaseOrderDTO getById(Integer id) { return toDTO(poRepo.findById(id).orElseThrow()); }
+    public PurchaseOrderDTO getById(Integer id) { return mapper.toDTO(poRepo.findById(id).orElseThrow()); }
 
     @Override
     public List<PODetailDTO> getDetails(Integer poId) {
-        return podRepo.findByPurchaseOrderId(poId).stream().map(this::toDetailDTO).toList();
+        return mapper.toDetailDTOList(podRepo.findByPurchaseOrderId(poId));
     }
 
     @Override
@@ -112,7 +86,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
                 podRepo.save(pod);
             }
         }
-        return toDTO(po);
+        return mapper.toDTO(po);
     }
 
     @Override
@@ -123,7 +97,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         if (dto.deliveryMethod != null) po.setDeliveryMethod(PurchaseOrder.DeliveryMethod.valueOf(dto.deliveryMethod));
         if (dto.status != null) po.setStatus(PurchaseOrder.POStatus.valueOf(dto.status)); // admin can thiệp status
         poRepo.save(po);
-        return toDTO(po);
+        return mapper.toDTO(po);
     }
 
     // UC12: Update PO with items when it is in DRAFT status (after rejection)
@@ -151,7 +125,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
                 podRepo.save(pod);
             }
         }
-        return toDTO(po);
+        return mapper.toDTO(po);
     }
 
     @Override
