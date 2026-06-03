@@ -45,3 +45,31 @@ Chronological record of all wiki operations.
 ## [2026-06-03] write | ⭐ Refactor roadmap (main deliverable)
 - Pages created: [[analysis/refactor-roadmap]] — 6-phase plan, critical security findings, open questions blocking start
 - Pages updated: [[index]] with quick-links + critical findings summary
+
+## [2026-06-03] pivot | Context change — Academic (BTL ĐHBK) thay vì Production
+- User clarified: dự án là bài tập lớn ĐHBK, chấm theo SOLID + Design Patterns + Clean Code
+- Production roadmap đánh dấu out-of-scope, giữ làm tham khảo
+- Dispatched 2 Explore agents code review BE + FE (academic angle)
+  - BE Grade: B- / 7.5-8/10 (God class, toDTO duplication, missing patterns)
+  - FE Grade: C / B- (CRUD duplication, mega pages, missing reusable components)
+
+## [2026-06-03] write | Academic deliverables (via Workflow, 5 agents parallel + 1 adversarial critic)
+- Pages created:
+  - [[analysis/academic-code-review]] — 542 lines, evidence-driven SOLID + clean code audit
+  - [[analysis/academic-target-architecture]] — 531 lines, 4 bounded contexts (collapsed from 7), package-by-feature
+  - [[analysis/academic-design-patterns]] — 863 lines, 6 patterns selected, Before/After code
+  - [[analysis/academic-refactor-plan]] — 655 lines, 5 phases × 10 weeks, milestone checklist
+- Critic flagged: State pattern bug, MapStruct config order, broken wikilinks, NO UML diagrams (biggest grade risk)
+
+## [2026-06-03] fix | Apply critic findings (via Workflow, 5 agents parallel + 1 verify)
+- Pages created:
+  - [[analysis/academic-uml-diagrams]] — 520 lines, 16 Mermaid diagrams (ER, class, state, sequence, use case, activity, component)
+- Pages updated: all 4 academic pages
+  - Fixed State pattern (entity holds @Transient state ref, RejectedState.reset() preserves reason)
+  - Fixed MapStruct annotationProcessorPaths order (lombok → mapstruct-processor → lombok-mapstruct-binding)
+  - All Observer listeners @TransactionalEventListener(AFTER_COMMIT)
+  - Chain of Responsibility unified on Spring @Autowired List<> + @Order
+  - Bounded contexts collapsed 7 → 4
+  - ISP interfaces aligned: 5 helpers + 1 core
+  - Effort bumped realistic: total ~10 weeks
+  - All broken wikilinks fixed

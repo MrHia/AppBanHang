@@ -9,7 +9,10 @@ updated: 2026-06-03
 
 # Refactor Roadmap — AppBanHang full-system
 
-> **Status**: Khung kế hoạch ban đầu để refactor toàn bộ hệ thống. Chia thành **6 phases** với rủi ro thấp dần. Phase 0 là pre-flight (test coverage + CI), Phase 1 chặn lỗ hổng critical, Phase 6 là tối ưu UX/code quality.
+> [!warning] ⚠️ Out-of-scope cho bài tập học thuật
+> Roadmap này tập trung **production concerns** (security, secrets, HTTPS, CI/CD, observability). Đối với context bài tập lớn ĐHBK, các điều này KHÔNG được chấm. Xem **[[analysis/academic-code-review]]** + **[[analysis/academic-refactor-plan]]** cho roadmap đúng context. Giữ lại trang này như tham khảo cho tương lai nếu dự án được triển khai thật.
+
+> **Status**: Khung kế hoạch production-grade — 6 phases với rủi ro thấp dần. Phase 0 là pre-flight (test coverage + CI), Phase 1 chặn lỗ hổng critical, Phase 6 là tối ưu UX/code quality.
 
 ## Executive summary
 
