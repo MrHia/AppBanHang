@@ -1,0 +1,39 @@
+classDiagram
+  class PurchaseOrder {
+    -POStatus status
+    -String rejectionReason
+    -POState state @Transient
+    +send()
+    +confirm()
+    +reject(reason)
+    +resetFromRejected()
+    +markDone()
+    ~applyTransition(POStatus, POState)
+  }
+  class POState {
+    <<interface>>
+    +send(po)
+    +confirm(po)
+    +reject(po, reason)
+    +reset(po)
+    +markDone(po)
+  }
+  class DraftState
+  class SentState
+  class ConfirmedState
+  class RejectedState {
+    +reset(po) : transitions to DRAFT, preserves rejectionReason
+  }
+  class DoneState
+  class POStateRegistry {
+    <<singleton>>
+    +get(POStatus) POState
+  }
+
+  POState <|.. DraftState
+  POState <|.. SentState
+  POState <|.. ConfirmedState
+  POState <|.. RejectedState
+  POState <|.. DoneState
+  PurchaseOrder o--> POState
+  PurchaseOrder ..> POStateRegistry : looks up state

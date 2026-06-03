@@ -1,0 +1,8 @@
+stateDiagram-v2
+  [*] --> PENDING : Sales submit
+  PENDING --> PROCESSING : Overseas pickup
+  PROCESSING --> DONE : all POs delivered
+  PROCESSING --> CANCELLED : explicit cancel
+  PENDING --> CANCELLED
+  DONE --> [*]
+  CANCELLED --> [*]

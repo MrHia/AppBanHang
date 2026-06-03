@@ -1,0 +1,29 @@
+sequenceDiagram
+  actor Site as Site User
+  participant FE as Frontend
+  participant API as POController
+  participant Svc as PurchaseOrderService
+  participant DB as Repository
+  participant Bus as ApplicationEventPublisher
+  participant Notif as NotificationListener
+  participant Email as EmailListener
+  participant Audit as AuditListener
+
+  Site->>FE: Click "Confirm PO"
+  FE->>API: POST /api/po/{id}/confirm
+  API->>Svc: confirmPO(id)
+  Svc->>DB: findById(id)
+  DB-->>Svc: PurchaseOrder
+  Svc->>Svc: state.confirm(po)
+  Svc->>DB: save(po)
+  Svc->>Bus: publishEvent(POConfirmedEvent)
+  API-->>FE: 200 OK
+  FE-->>Site: "PO confirmed"
+
+  Note over Bus: AFTER_COMMIT phase only
+  Bus->>Notif: onPOConfirmed(event)
+  Notif->>DB: insert Notification (Warehouse)
+  Bus->>Email: onPOConfirmed(event)
+  Email->>Email: send mail to Warehouse mailbox
+  Bus->>Audit: onPOConfirmed(event)
+  Audit->>DB: insert AuditLog

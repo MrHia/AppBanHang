@@ -1,0 +1,16 @@
+flowchart TD
+  Start([Start: Overseas picks request])
+  S1[Step 1: Find matching sites]
+  S2[Step 2: Pick sites + tick merchandise per site]
+  D1{All required?}
+  S3[Step 3: Send stock inquiries]
+  S4[Step 4: Wait for responses or 48h timeout]
+  D2{>= 1 site responded?}
+  S5[Step 5: Aggregate matrix + split POs]
+  End([End: POs created in DRAFT])
+
+  Start --> S1 --> S2 --> D1
+  D1 -->|No: reject reason required| S2
+  D1 -->|Yes| S3 --> S4 --> D2
+  D2 -->|No: keep waiting or timeout| S4
+  D2 -->|Yes| S5 --> End

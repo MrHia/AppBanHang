@@ -1,0 +1,21 @@
+flowchart LR
+  Admin([Admin])
+  Sales([Sales])
+  Overseas([Overseas])
+  Site([Site])
+  Warehouse([Warehouse])
+
+  Admin --> UC1[Manage accounts]
+  Admin --> UC2[Manage sites]
+  Admin --> UC3[Manage merchandise]
+  Sales --> UC4[Create process request]
+  Sales --> UC5[View request history]
+  Overseas --> UC6[Process request multi-step]
+  Overseas --> UC11[Create PO DRAFT]
+  Overseas --> UC12[Edit PO DRAFT]
+  Site --> UC7[Respond stock inquiry]
+  Site --> UC13[Confirm/Reject PO]
+  Site --> UC19[Respond discrepancy]
+  Warehouse --> UC15[Receive goods]
+  Warehouse --> UC18[Report discrepancy]
+  Warehouse --> UC20[Resolve discrepancy]

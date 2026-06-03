@@ -1,0 +1,9 @@
+stateDiagram-v2
+  [*] --> PENDING : Overseas send
+  PENDING --> RESPONDED : Site responds all items
+  PENDING --> PARTIAL : Site responds partial
+  PENDING --> TIMEOUT : 48h elapsed [scheduler]
+  PARTIAL --> RESPONDED : Site completes
+  RESPONDED --> [*]
+  PARTIAL --> [*]
+  TIMEOUT --> [*]

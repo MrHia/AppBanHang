@@ -1,0 +1,45 @@
+flowchart TD
+  subgraph Pages [Pages - thin route containers]
+    AdminAccounts[admin/accounts.js ~30L]
+    AdminSites[admin/sites.js ~30L]
+    OverseasProc[overseas/process-request/id.js]
+  end
+
+  subgraph Features [Features - composed]
+    AccountCRUD[features/admin/AccountCRUD]
+    PickStep[features/overseas/PickSitesStep]
+    SendStep[features/overseas/SendInquiriesStep]
+  end
+
+  subgraph Primitives [Reusable components]
+    DataTable
+    FormDialog
+    ConfirmDialog
+    StatusChip
+    AlertSnackbar
+  end
+
+  subgraph Hooks [Custom hooks]
+    useCRUDTable
+    useFormDialog
+    useAlert
+    useNotifications
+  end
+
+  subgraph API [API layer]
+    apiClient[api/index.js axios + interceptor]
+    accountApi
+    poApi
+  end
+
+  AdminAccounts --> AccountCRUD
+  AdminSites --> AccountCRUD
+  OverseasProc --> PickStep
+  OverseasProc --> SendStep
+  AccountCRUD --> DataTable
+  AccountCRUD --> FormDialog
+  AccountCRUD --> ConfirmDialog
+  AccountCRUD --> AlertSnackbar
+  AccountCRUD --> useCRUDTable
+  useCRUDTable --> apiClient
+  accountApi --> apiClient

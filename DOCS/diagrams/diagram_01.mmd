@@ -1,0 +1,54 @@
+erDiagram
+  ROLE ||--o{ ACCOUNT : has
+  SITE ||--o{ ACCOUNT : assigns
+  SITE ||--o{ SITE_MERCHANDISE : stocks
+  MERCHANDISE ||--o{ SITE_MERCHANDISE : sold_at
+  ACCOUNT ||--o{ PROCESS_REQUEST : creates
+  PROCESS_REQUEST ||--o{ REQUEST_ITEM : contains
+  PROCESS_REQUEST ||--o{ REQUEST_SITE : assigned_to
+  SITE ||--o{ REQUEST_SITE : receives
+  MERCHANDISE ||--o{ REQUEST_SITE : refers
+  PROCESS_REQUEST ||--o{ STOCK_INQUIRY : triggers
+  SITE ||--o{ STOCK_INQUIRY : sent_to
+  STOCK_INQUIRY ||--o{ STOCK_INQUIRY_ITEM : contains
+  PROCESS_REQUEST ||--o{ PURCHASE_ORDER : produces
+  SITE ||--o{ PURCHASE_ORDER : fulfilled_by
+  PURCHASE_ORDER ||--o{ PO_DETAIL : contains
+  PURCHASE_ORDER ||--o{ WAREHOUSE_RECEIPT : received
+  ACCOUNT ||--o{ WAREHOUSE_RECEIPT : received_by
+  WAREHOUSE_RECEIPT ||--o{ RECEIPT_ITEM : contains
+  WAREHOUSE_RECEIPT ||--o{ SITE_DISCREPANCY : may_have
+  MERCHANDISE ||--o{ SITE_DISCREPANCY : about
+  SITE_DISCREPANCY ||--o{ DISCREPANCY_MESSAGE : has
+  ACCOUNT ||--o{ AUDIT_LOG : authored_by
+
+  ROLE {
+    int id PK
+    varchar name UK
+  }
+  ACCOUNT {
+    int id PK
+    varchar email UK
+    varchar password
+    int role_id FK
+    int site_id FK
+    int failed_attempts
+    datetime locked_until
+    boolean must_change_password
+  }
+  PROCESS_REQUEST {
+    int id PK
+    varchar code UK
+    enum status
+    int created_by FK
+    date desired_date
+  }
+  PURCHASE_ORDER {
+    int id PK
+    varchar code UK
+    enum status
+    enum delivery_method
+    int process_request_id FK
+    int site_id FK
+    text rejection_reason
+  }

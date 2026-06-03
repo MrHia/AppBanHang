@@ -1,0 +1,33 @@
+classDiagram
+  class IdentityCatalog {
+    +Account
+    +Role
+    +Site
+    +Merchandise
+    +SiteMerchandise
+  }
+  class SalesOrdering {
+    +ProcessRequest
+    +RequestItem
+    +RequestSite
+  }
+  class Procurement {
+    +StockInquiry
+    +StockInquiryItem
+    +PurchaseOrder
+    +PODetail
+    +WarehouseReceipt
+    +ReceiptItem
+    +SiteDiscrepancy
+    +DiscrepancyMessage
+  }
+  class NotificationAudit {
+    +Notification
+    +AuditLog
+  }
+
+  SalesOrdering ..> IdentityCatalog : uses Account/Site/Merchandise
+  Procurement ..> SalesOrdering : derives from ProcessRequest
+  Procurement ..> IdentityCatalog : uses Site/Merchandise
+  NotificationAudit <.. Procurement : publishes events
+  NotificationAudit <.. SalesOrdering : publishes events

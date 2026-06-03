@@ -1,0 +1,19 @@
+sequenceDiagram
+  participant Sched as StockInquiryTimeoutScheduler
+  participant Repo as StockInquiryRepository
+  participant Svc as StockInquiryService
+  participant Bus as ApplicationEventPublisher
+  participant Notif as NotificationListener
+
+  loop every 5 minutes (@Scheduled fixedRate=300000)
+    Sched->>Repo: findPendingOlderThan(48h)
+    Repo-->>Sched: List<StockInquiry>
+    loop for each inquiry
+      Sched->>Svc: markTimeout(inquiry)
+      Svc->>Repo: save (status=TIMEOUT)
+      Svc->>Bus: publishEvent(InquiryTimeoutEvent)
+    end
+  end
+
+  Bus->>Notif: onInquiryTimeout(event)
+  Notif->>Repo: insert Notification (Overseas)

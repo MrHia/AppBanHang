@@ -1,0 +1,14 @@
+stateDiagram-v2
+  [*] --> DRAFT : create()
+  DRAFT --> SENT : send()
+  SENT --> CONFIRMED : confirm() [Site action]
+  SENT --> REJECTED : reject(reason) [Site action]
+  REJECTED --> DRAFT : reset() [Overseas action, rejectionReason preserved]
+  CONFIRMED --> DONE : markDone() [Warehouse received]
+  DONE --> [*]
+
+  note right of REJECTED
+    rejectionReason field
+    persists across reset
+    (bug fix v1.1.0)
+  end note
