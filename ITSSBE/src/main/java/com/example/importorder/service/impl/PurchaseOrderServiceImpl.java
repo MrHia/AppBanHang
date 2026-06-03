@@ -2,13 +2,16 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.event.POConfirmedEvent;
+import com.example.importorder.event.PORejectedEvent;
+import com.example.importorder.event.POSentEvent;
 import com.example.importorder.mapper.PurchaseOrderMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -24,12 +27,13 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
     private final INotificationService notificationService;
     private final IEmailService emailService;
     private final PurchaseOrderMapper mapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public PurchaseOrderServiceImpl(PurchaseOrderRepository poRepo, PODetailRepository podRepo,
             ProcessRequestRepository prRepo, SiteRepository siteRepo,
             MerchandiseRepository mRepo, IAuditService auditService,
             INotificationService notificationService, IEmailService emailService,
-            PurchaseOrderMapper mapper) {
+            PurchaseOrderMapper mapper, ApplicationEventPublisher eventPublisher) {
         this.poRepo = poRepo;
         this.podRepo = podRepo;
         this.prRepo = prRepo;
@@ -39,6 +43,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         this.notificationService = notificationService;
         this.emailService = emailService;
         this.mapper = mapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -132,63 +137,40 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
     @Transactional
     public void sendPO(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        if (po.getStatus() != PurchaseOrder.POStatus.DRAFT) {
-            throw new RuntimeException("Only DRAFT POs can be sent");
-        }
-        po.setStatus(PurchaseOrder.POStatus.SENT);
+        po.send(); // State pattern: throws if not DRAFT, transitions to SENT
         poRepo.save(po);
+        eventPublisher.publishEvent(new POSentEvent(po.getId(), po.getCode()));
     }
 
-    // UC16: When Site confirms PO -> auto-notify WAREHOUSE
+    // UC16: When Site confirms PO -> auto-notify WAREHOUSE (via PONotificationListener + POEmailListener)
     @Override
     @Transactional
     public void confirmPO(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        if (po.getStatus() != PurchaseOrder.POStatus.SENT) {
-            throw new RuntimeException("Only SENT POs can be confirmed");
-        }
-        po.setStatus(PurchaseOrder.POStatus.CONFIRMED);
-        po.setConfirmedAt(LocalDateTime.now());
+        po.confirm(); // State pattern: throws if not SENT, transitions to CONFIRMED + sets confirmedAt
         poRepo.save(po);
-
-        // SRS UC16: System actor "Hệ thống quản lý kho" automatically recognizes
-        // the confirmed PO and creates notification for WAREHOUSE
-        notificationService.createNotification(
-            "WAREHOUSE",
-            "PO đã xác nhận - " + po.getCode(),
-            "Site " + po.getSite().getName() + " đã xác nhận PO #" + po.getCode() +
-            ". Vui lòng chuẩn bị nhận hàng.",
-            "purchase_order",
-            po.getId()
-        );
-
-        // Also send email notification
-        emailService.sendPOConfirmationEmail(
-            "warehouse@system.com",
-            po.getCode(),
-            po.getSite().getName()
+        eventPublisher.publishEvent(
+            new POConfirmedEvent(po.getId(), po.getCode(), po.getSite().getName(), "warehouse@system.com")
         );
     }
 
-    // Fix bug: was setting REJECTED then immediately overwriting with DRAFT
+    // SRS UC12: PO goes to DRAFT (so Overseas can edit and resend) preserving rejectionReason
     @Override
     @Transactional
     public void rejectPO(Integer id, String reason) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        if (po.getStatus() != PurchaseOrder.POStatus.SENT) {
-            throw new RuntimeException("Only SENT POs can be rejected");
-        }
-        // SRS UC12: PO goes to DRAFT (so Overseas can edit and resend)
-        po.setRejectionReason(reason);
-        po.setStatus(PurchaseOrder.POStatus.DRAFT);
+        // State pattern: SENT -> REJECTED -> DRAFT, rejectionReason preserved by RejectedState
+        po.reject(reason);
+        po.resetFromRejected();
         poRepo.save(po);
+        eventPublisher.publishEvent(new PORejectedEvent(po.getId(), po.getCode(), reason));
     }
 
     @Override
     @Transactional
     public void markDone(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        po.setStatus(PurchaseOrder.POStatus.DONE);
+        po.markDone(); // State pattern: only CONFIRMED -> DONE
         poRepo.save(po);
     }
 }

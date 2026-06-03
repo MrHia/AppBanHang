@@ -1,5 +1,7 @@
 package com.example.importorder.service.impl;
 
+import com.example.importorder.domain.inquiry.stocksource.StockSourceContext;
+import com.example.importorder.domain.inquiry.stocksource.StockSourceResolver;
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
 import com.example.importorder.mapper.StockInquiryMapper;
@@ -20,12 +22,14 @@ public class StockInquiryServiceImpl implements IStockInquiryService {
     private final SiteRepository siteRepo;
     private final RequestSiteRepository rsRepo;
     private final StockInquiryMapper mapper;
+    private final StockSourceResolver resolver;
 
     public StockInquiryServiceImpl(StockInquiryRepository siRepo, StockInquiryItemRepository siiRepo,
             SiteMerchandiseRepository smRepo, ProcessRequestRepository prRepo, SiteRepository siteRepo,
-            RequestSiteRepository rsRepo, StockInquiryMapper mapper) {
+            RequestSiteRepository rsRepo, StockInquiryMapper mapper, StockSourceResolver resolver) {
         this.siRepo = siRepo; this.siiRepo = siiRepo; this.smRepo = smRepo;
         this.prRepo = prRepo; this.siteRepo = siteRepo; this.rsRepo = rsRepo; this.mapper = mapper;
+        this.resolver = resolver;
     }
 
     @Override public List<StockInquiryDTO> getAll() { return mapper.toDTOList(siRepo.findAll()); }
@@ -97,20 +101,44 @@ public class StockInquiryServiceImpl implements IStockInquiryService {
 
     /**
      * Returns inventory matrix for a process request.
-     * Priority:
-     *  1. stock_inquiry_item.quantity (actual inquiry response from site)
-     *  2. site_merchandise.stock_quantity (reference stock from Site's merchandise management page)
+     * Cascade priority is now encoded by {@link com.example.importorder.domain.inquiry.stocksource.StockSource}
+     * Strategy beans (ordered via @Order):
+     *  1. InquiryResponseStockSource — actual inquiry response from site
+     *  2. ReferenceStockSource — site_merchandise.stock_quantity (reference)
+     *  3. NoDataStockSource — terminal fallback returning 0
      * Also includes sites that have site_merchandise but no inquiry yet.
      *
      * Returns Map<siteId, Map<merchandiseId, StockInfo>>
-     * StockInfo has: quantity, source ("inquiry" or "reference")
      */
     @Override
     public Map<Integer, Map<Integer, StockInfoDTO>> getInventoryMatrix(Integer requestId) {
         ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
         List<Integer> merchIds = pr.getRequestItems().stream().map(ri -> ri.getMerchandise().getId()).toList();
 
-        // Build inquiry-based stock from responded inquiries
+        // Step 1: build StockSourceContext (data fetching — same queries as before)
+        StockSourceContext ctx = buildStockSourceContext(requestId, merchIds);
+
+        // Step 2: collect siteIds (responded inquiries + sites with site_merchandise covering merchIds)
+        Set<Integer> allSiteIds = collectAllSiteIds(ctx);
+
+        // Step 3: resolve via Strategy cascade
+        Map<Integer, Map<Integer, StockInfoDTO>> matrix = new HashMap<>();
+        for (Integer siteId : allSiteIds) {
+            Map<Integer, StockInfoDTO> siteMatrix = new HashMap<>();
+            for (Integer merchId : merchIds) {
+                siteMatrix.put(merchId, resolver.resolve(siteId, merchId, ctx));
+            }
+            matrix.put(siteId, siteMatrix);
+        }
+        return matrix;
+    }
+
+    /**
+     * Builds the {@link StockSourceContext} by loading inquiry responses and reference stock
+     * (same data-fetching logic that previously lived inline in {@code getInventoryMatrix}).
+     */
+    private StockSourceContext buildStockSourceContext(Integer requestId, List<Integer> merchIds) {
+        // Inquiry-based stock from responded inquiries
         List<StockInquiry> inquiries = siRepo.findByProcessRequestId(requestId);
         Map<Integer, Map<Integer, Integer>> inquiryStock = new HashMap<>();
         Set<Integer> respondedSiteIds = new HashSet<>();
@@ -124,53 +152,37 @@ public class StockInquiryServiceImpl implements IStockInquiryService {
             inquiryStock.put(si.getSite().getId(), siteStock);
         }
 
-        // Collect all site IDs: responded inquiries + sites with site_merchandise
-        Set<Integer> allSiteIds = new HashSet<>(respondedSiteIds);
-        List<SiteMerchandise> allSM = smRepo.findAll();
-        for (SiteMerchandise sm : allSM) {
+        // Collect candidate siteIds: responded + sites with active site_merchandise for these merchIds
+        Set<Integer> candidateSiteIds = new HashSet<>(respondedSiteIds);
+        for (SiteMerchandise sm : smRepo.findAll()) {
             if (merchIds.contains(sm.getMerchandise().getId()) && sm.getIsActive()) {
-                allSiteIds.add(sm.getSite().getId());
+                candidateSiteIds.add(sm.getSite().getId());
             }
         }
 
-        // Build site_merchandise stock lookup
+        // Reference stock lookup
         Map<Integer, Map<Integer, Integer>> referenceStock = new HashMap<>();
-        for (Integer siteId : allSiteIds) {
-            List<SiteMerchandise> sms = smRepo.findBySiteIdAndMerchandiseIds(siteId, merchIds);
+        for (Integer siteId : candidateSiteIds) {
             Map<Integer, Integer> siteRefStock = new HashMap<>();
-            for (SiteMerchandise sm : sms) {
-                siteRefStock.put(sm.getMerchandise().getId(), sm.getStockQuantity() != null ? sm.getStockQuantity() : 0);
+            for (SiteMerchandise sm : smRepo.findBySiteIdAndMerchandiseIds(siteId, merchIds)) {
+                siteRefStock.put(
+                    sm.getMerchandise().getId(),
+                    sm.getStockQuantity() != null ? sm.getStockQuantity() : 0
+                );
             }
             referenceStock.put(siteId, siteRefStock);
         }
 
-        // Build final matrix
-        Map<Integer, Map<Integer, StockInfoDTO>> matrix = new HashMap<>();
-        for (Integer siteId : allSiteIds) {
-            Map<Integer, StockInfoDTO> siteMatrix = new HashMap<>();
-            Map<Integer, Integer> inq = inquiryStock.get(siteId);
-            Map<Integer, Integer> ref = referenceStock.getOrDefault(siteId, Collections.emptyMap());
+        return new StockSourceContext(inquiryStock, referenceStock, respondedSiteIds);
+    }
 
-            for (Integer merchId : merchIds) {
-                StockInfoDTO info = new StockInfoDTO();
-                if (inq != null && inq.containsKey(merchId)) {
-                    // Site responded — use inquiry response
-                    info.quantity = inq.get(merchId);
-                    info.source = "inquiry";
-                } else if (ref.containsKey(merchId)) {
-                    // No inquiry response yet — use reference stock from site_merchandise
-                    info.quantity = ref.get(merchId);
-                    info.source = "reference";
-                } else {
-                    // Site doesn't have this merchandise
-                    info.quantity = 0;
-                    info.source = "none";
-                }
-                siteMatrix.put(merchId, info);
-            }
-            matrix.put(siteId, siteMatrix);
-        }
-
-        return matrix;
+    /**
+     * Set of all siteIds to include in the matrix: union of responded inquiry sites
+     * and sites with reference stock (already collected in ctx.referenceStockBySite.keySet()).
+     */
+    private Set<Integer> collectAllSiteIds(StockSourceContext ctx) {
+        Set<Integer> all = new HashSet<>(ctx.respondedSiteIds);
+        all.addAll(ctx.referenceStockBySite.keySet());
+        return all;
     }
 }

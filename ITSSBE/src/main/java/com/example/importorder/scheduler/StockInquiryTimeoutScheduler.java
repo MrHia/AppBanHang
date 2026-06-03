@@ -2,9 +2,10 @@ package com.example.importorder.scheduler;
 
 import com.example.importorder.entity.RequestSite;
 import com.example.importorder.entity.StockInquiry;
+import com.example.importorder.event.InquiryTimeoutEvent;
 import com.example.importorder.repository.RequestSiteRepository;
 import com.example.importorder.repository.StockInquiryRepository;
-import com.example.importorder.service.INotificationService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.scheduling.annotation.Scheduled;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
@@ -17,13 +18,13 @@ public class StockInquiryTimeoutScheduler {
 
     private final StockInquiryRepository siRepo;
     private final RequestSiteRepository rsRepo;
-    private final INotificationService notificationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public StockInquiryTimeoutScheduler(StockInquiryRepository siRepo, RequestSiteRepository rsRepo,
-            INotificationService notificationService) {
+            ApplicationEventPublisher eventPublisher) {
         this.siRepo = siRepo;
         this.rsRepo = rsRepo;
-        this.notificationService = notificationService;
+        this.eventPublisher = eventPublisher;
     }
 
     // SRS UC7: Auto-update stock inquiry status to TIMEOUT after 48 hours
@@ -49,15 +50,12 @@ public class StockInquiryTimeoutScheduler {
                 }
             }
 
-            // Notify Overseas about the timeout
-            notificationService.createNotification(
-                "OVERSEAS",
-                "Stock inquiry timed out - " + si.getProcessRequest().getCode(),
-                "Site " + si.getSite().getName() + " did not respond to stock inquiry for request "
-                    + si.getProcessRequest().getCode() + " within 48 hours.",
-                "process_request",
-                si.getProcessRequest().getId()
-            );
+            // Notify Overseas about the timeout — PONotificationListener handles via InquiryTimeoutEvent
+            eventPublisher.publishEvent(new InquiryTimeoutEvent(
+                si.getId(),
+                si.getProcessRequest().getCode(),
+                si.getSite().getName()
+            ));
         }
     }
 }

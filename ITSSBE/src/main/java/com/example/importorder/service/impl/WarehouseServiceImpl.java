@@ -2,10 +2,12 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.event.DiscrepancyCreatedEvent;
 import com.example.importorder.mapper.PurchaseOrderMapper;
 import com.example.importorder.mapper.WarehouseMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDateTime;
@@ -25,12 +27,14 @@ public class WarehouseServiceImpl implements IWarehouseService {
     private final IEmailService emailService;
     private final WarehouseMapper mapper;
     private final PurchaseOrderMapper poMapper;
+    private final ApplicationEventPublisher eventPublisher;
 
     public WarehouseServiceImpl(WarehouseReceiptRepository wrRepo, ReceiptItemRepository riRepo,
             PODetailRepository podRepo, PurchaseOrderRepository poRepo,
             SiteDiscrepancyRepository discRepo, DiscrepancyMessageRepository msgRepo,
             AccountRepository accRepo, INotificationService notificationService, IEmailService emailService,
-            WarehouseMapper mapper, PurchaseOrderMapper poMapper) {
+            WarehouseMapper mapper, PurchaseOrderMapper poMapper,
+            ApplicationEventPublisher eventPublisher) {
         this.wrRepo = wrRepo;
         this.riRepo = riRepo;
         this.podRepo = podRepo;
@@ -42,6 +46,7 @@ public class WarehouseServiceImpl implements IWarehouseService {
         this.emailService = emailService;
         this.mapper = mapper;
         this.poMapper = poMapper;
+        this.eventPublisher = eventPublisher;
     }
 
     @Override
@@ -116,23 +121,16 @@ public class WarehouseServiceImpl implements IWarehouseService {
                 sd.setStatus(SiteDiscrepancy.DiscrepancyStatus.OPEN);
                 discRepo.save(sd);
 
-                // SRS UC19: Notify site about discrepancy
+                // SRS UC19 + UC16: publish DiscrepancyCreatedEvent — POEmailListener sends site email,
+                // PONotificationListener creates WAREHOUSE notification.
                 String siteEmail = wr.getPurchaseOrder().getSite().getEmail();
                 String siteName = wr.getPurchaseOrder().getSite().getName();
                 int shortage = item.receivedQuantity < ri.getOrderedQuantity()
                     ? ri.getOrderedQuantity() - item.receivedQuantity : 0;
-                if (shortage > 0) {
-                    emailService.sendDiscrepancyNotification(siteEmail, poCode, ri.getMerchandise().getName(), shortage);
-                }
-
-                // SRS UC16: Create system notification for WAREHOUSE
-                notificationService.createNotification(
-                    "WAREHOUSE",
-                    "Chênh lệch hàng hóa - " + poCode,
-                    "PO #" + poCode + ": " + ri.getMerchandise().getName() +
-                    " thiếu " + shortage + " chiếc. Vui lòng phối hợp với Site " + siteName + " giải quyết.",
-                    "purchase_order", wr.getPurchaseOrder().getId()
-                );
+                eventPublisher.publishEvent(new DiscrepancyCreatedEvent(
+                    wr.getPurchaseOrder().getId(), poCode, siteEmail, siteName,
+                    ri.getMerchandise().getName(), shortage
+                ));
             }
         }
 

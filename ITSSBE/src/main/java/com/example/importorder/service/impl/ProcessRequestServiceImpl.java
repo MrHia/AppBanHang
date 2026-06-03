@@ -5,6 +5,8 @@ import com.example.importorder.entity.*;
 import com.example.importorder.mapper.ProcessRequestMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
+import com.example.importorder.validation.AssignmentContext;
+import com.example.importorder.validation.AssignmentValidationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -30,6 +32,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     private final IAuditService auditService;
     private final IStockInquiryService inquiryService;
     private final ProcessRequestMapper mapper;
+    private final AssignmentValidationService validationService;
 
     public ProcessRequestServiceImpl(
             ProcessRequestRepository prRepo, RequestItemRepository riRepo,
@@ -38,12 +41,14 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             RequestSiteRepository rsRepo, StockInquiryRepository siRepo,
             StockInquiryItemRepository siiRepo, PurchaseOrderRepository poRepo,
             PODetailRepository podRepo, IAuditService auditService,
-            IStockInquiryService inquiryService, ProcessRequestMapper mapper) {
+            IStockInquiryService inquiryService, ProcessRequestMapper mapper,
+            AssignmentValidationService validationService) {
         this.prRepo = prRepo; this.riRepo = riRepo; this.mRepo = mRepo;
         this.accRepo = accRepo; this.siteRepo = siteRepo; this.smRepo = smRepo;
         this.rsRepo = rsRepo; this.siRepo = siRepo; this.siiRepo = siiRepo;
         this.poRepo = poRepo; this.podRepo = podRepo; this.auditService = auditService;
         this.inquiryService = inquiryService; this.mapper = mapper;
+        this.validationService = validationService;
     }
 
     /**
@@ -175,23 +180,15 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     @Override
     @Transactional
     public void saveMerchandiseAssignments(Integer requestId, List<MerchandisePickRequest> assignments) {
-        validateNonEmpty(assignments);
-
         ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
         Set<Integer> requestMerchIds = collectRequestMerchandiseIds(requestId);
 
-        validateNoDuplicates(assignments);
-        validateCompleteness(assignments, requestMerchIds);
-        validateMembership(assignments, requestMerchIds);
+        // Chain of Responsibility: NonEmpty -> NoDuplicates -> Completeness -> Membership
+        AssignmentContext ctx = new AssignmentContext(assignments, requestMerchIds);
+        validationService.runAll(ctx);
 
         for (MerchandisePickRequest asg : assignments) {
             applyAssignment(pr, asg, requestId);
-        }
-    }
-
-    private void validateNonEmpty(List<MerchandisePickRequest> assignments) {
-        if (assignments == null || assignments.isEmpty()) {
-            throw new IllegalArgumentException("Phải có ít nhất 1 lựa chọn");
         }
     }
 
@@ -199,30 +196,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         return riRepo.findByProcessRequestId(requestId).stream()
             .map(i -> i.getMerchandise().getId())
             .collect(Collectors.toSet());
-    }
-
-    private void validateNoDuplicates(List<MerchandisePickRequest> assignments) {
-        long distinctCount = assignments.stream().map(a -> a.merchandiseId).distinct().count();
-        if (distinctCount != assignments.size()) {
-            throw new IllegalArgumentException("Mỗi mặt hàng chỉ được phép xuất hiện 1 lần trong danh sách lựa chọn");
-        }
-    }
-
-    private void validateCompleteness(List<MerchandisePickRequest> assignments, Set<Integer> requestMerchIds) {
-        Set<Integer> allIds = assignments.stream().map(a -> a.merchandiseId).collect(Collectors.toSet());
-        if (!allIds.equals(requestMerchIds)) {
-            Set<Integer> missing = new HashSet<>(requestMerchIds);
-            missing.removeAll(allIds);
-            throw new IllegalArgumentException("Thiếu mặt hàng trong danh sách lựa chọn: " + missing);
-        }
-    }
-
-    private void validateMembership(List<MerchandisePickRequest> assignments, Set<Integer> requestMerchIds) {
-        for (MerchandisePickRequest asg : assignments) {
-            if (!requestMerchIds.contains(asg.merchandiseId)) {
-                throw new IllegalArgumentException("Mặt hàng " + asg.merchandiseId + " không thuộc request này");
-            }
-        }
     }
 
     private void applyAssignment(ProcessRequest pr, MerchandisePickRequest asg, Integer requestId) {
