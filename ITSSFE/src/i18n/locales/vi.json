@@ -65,6 +65,20 @@
     "loginFailed": "Đăng nhập thất bại",
     "testAccounts": "Tài khoản test:"
   },
+  "changePassword": {
+    "title": "Đổi mật khẩu",
+    "menuLabel": "Đổi mật khẩu",
+    "oldPassword": "Mật khẩu hiện tại",
+    "newPassword": "Mật khẩu mới",
+    "confirmPassword": "Xác nhận mật khẩu mới",
+    "submit": "Đổi mật khẩu",
+    "success": "Đổi mật khẩu thành công!",
+    "failed": "Đổi mật khẩu thất bại",
+    "mismatch": "Mật khẩu xác nhận không khớp",
+    "tooShort": "Mật khẩu mới phải có ít nhất 8 ký tự",
+    "sameAsOld": "Mật khẩu mới phải khác mật khẩu cũ",
+    "firstLoginWarning": "Bạn đang dùng mật khẩu tạm thời. Vui lòng đổi mật khẩu để tiếp tục."
+  },
   "admin": {
     "dashboard": {
       "title": "Quản trị hệ thống",
@@ -89,7 +103,9 @@
       "unlock": "Mở khóa",
       "resetPassword": "Đặt lại mật khẩu",
       "firstName": "Họ",
-      "lastName": "Tên"
+      "lastName": "Tên",
+      "site": "Site",
+      "newPasswordOptional": "Mật khẩu mới (để trống nếu giữ nguyên)"
     },
     "sites": {
       "title": "Quản lý site",

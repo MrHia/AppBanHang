@@ -10,10 +10,14 @@ export default function ProtectedRoute({ children, allowedRoles }) {
   React.useEffect(() => {
     if (!isLoading) {
       if (!isAuthenticated) { router.replace('/auth/login'); return; }
+      // UC1 ext: buộc đổi mật khẩu tạm trước khi vào bất kỳ trang nào
+      if (user?.mustChangePassword) { router.replace('/auth/change-password'); return; }
       if (allowedRoles && !allowedRoles.includes(user?.roleName)) { router.replace('/auth/login'); }
     }
-  }, [isAuthenticated, isLoading, user, router]);
+  }, [isAuthenticated, isLoading, user, router, allowedRoles]);
 
-  if (isLoading || !isAuthenticated) return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
+  if (isLoading || !isAuthenticated || user?.mustChangePassword) {
+    return <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100vh' }}><CircularProgress /></Box>;
+  }
   return children;
 }

@@ -16,6 +16,8 @@ export default function LoginPage() {
 
   React.useEffect(() => {
     if (user) {
+      // UC1 ext: mật khẩu tự sinh (mustChangePassword) → buộc đổi trước khi vào dashboard
+      if (user.mustChangePassword) { router.replace('/auth/change-password'); return; }
       const routes = { ADMIN: '/admin/dashboard', OVERSEAS: '/overseas/dashboard', SITE: '/site/dashboard', WAREHOUSE: '/warehouse/dashboard', SALES: '/sales/dashboard' };
       router.replace(routes[user.roleName] || '/');
     }

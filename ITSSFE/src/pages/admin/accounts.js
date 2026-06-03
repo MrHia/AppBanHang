@@ -8,11 +8,13 @@ import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { DataTable, FormDialog, AlertSnackbar } from 'src/components';
 import { useCRUDTable, useFormDialog, useAlert } from 'src/hooks';
-import { accountApi } from 'src/api';
+import { accountApi, siteApi } from 'src/api';
 import { useTranslation } from 'src/i18n/useTranslation';
 
 const ROLE_OPTIONS = ['ADMIN', 'OVERSEAS', 'SITE', 'WAREHOUSE', 'SALES'];
-const INITIAL_FORM = { email: '', firstName: '', lastName: '', phone: '', roleName: 'SALES', password: '' };
+// Vai trò duy nhất (chỉ 1 tài khoản). SITE/SALES được phép nhiều.
+const UNIQUE_ROLES = ['ADMIN', 'OVERSEAS', 'WAREHOUSE'];
+const INITIAL_FORM = { email: '', firstName: '', lastName: '', phone: '', roleName: 'SALES', password: '', siteId: '' };
 
 // Module-level fetcher so the hook's identity stays stable across renders.
 const fetchAccounts = () => accountApi.getAll();
@@ -22,25 +24,60 @@ function AccountsContent() {
   const { items: accounts, reload } = useCRUDTable(fetchAccounts);
   const form = useFormDialog({ initialState: INITIAL_FORM });
   const { alert, showSuccess, showError, closeAlert } = useAlert();
+  const [sites, setSites] = React.useState([]);
+
+  React.useEffect(() => {
+    siteApi.getAll().then(s => setSites(Array.isArray(s) ? s : [])).catch(() => {});
+  }, []);
+
+  // Tập hợp role duy nhất đã có tài khoản → ẩn khỏi danh sách khi tạo mới.
+  const takenUniqueRoles = React.useMemo(
+    () => new Set((accounts || []).filter(a => UNIQUE_ROLES.includes(a.roleName)).map(a => a.roleName)),
+    [accounts]
+  );
 
   const fields = React.useMemo(() => {
-    const base = [
-      { key: 'email', label: t('common.email'), type: 'email', required: true },
+    const roleOptions = ROLE_OPTIONS.filter(r => {
+      if (!UNIQUE_ROLES.includes(r)) return true;                       // SITE/SALES luôn có
+      if (form.isEditing && form.formData.roleName === r) return true;  // giữ role hiện tại khi sửa
+      return !takenUniqueRoles.has(r);                                  // ẩn role duy nhất đã tồn tại
+    });
+    const list = [
+      { key: 'email', label: t('common.email'), type: 'email', required: true, disabled: form.isEditing },
       { key: 'firstName', label: t('admin.accounts.firstName') },
       { key: 'lastName', label: t('admin.accounts.lastName') },
       { key: 'phone', label: t('common.phone') },
-      { key: 'roleName', label: t('admin.accounts.role'), type: 'select', options: ROLE_OPTIONS, required: true },
+      { key: 'roleName', label: t('admin.accounts.role'), type: 'select', options: roleOptions, required: true },
     ];
-    return form.isEditing ? base : [...base, { key: 'password', label: t('admin.accounts.tempPassword'), type: 'password' }];
-  }, [t, form.isEditing]);
+    // Chọn site khi role = SITE để tài khoản gắn đúng địa điểm.
+    if (form.formData.roleName === 'SITE') {
+      list.push({
+        key: 'siteId', label: t('admin.accounts.site', 'Site'), type: 'select',
+        options: (sites || []).map(s => ({ value: s.id, label: `${s.code} - ${s.name}` })),
+      });
+    }
+    // Mật khẩu: tạo = mật khẩu tạm (trống → BE tự sinh); sửa = đổi mật khẩu (trống → giữ nguyên).
+    list.push({
+      key: 'password', type: 'password',
+      label: form.isEditing
+        ? t('admin.accounts.newPasswordOptional', 'Mật khẩu mới (để trống nếu giữ nguyên)')
+        : t('admin.accounts.tempPassword'),
+    });
+    return list;
+  }, [t, form.isEditing, form.formData.roleName, sites, takenUniqueRoles]);
 
   const handleSave = async () => {
     try {
+      // Loại field rỗng để BE update theo kiểu partial (không ghi đè bằng giá trị trống).
+      const payload = { ...form.formData };
+      if (!payload.password) delete payload.password;
+      if (payload.siteId === '' || payload.siteId == null) delete payload.siteId;
+
       if (form.isEditing) {
-        await accountApi.update(form.editingId, form.formData);
+        await accountApi.update(form.editingId, payload);
         showSuccess(t('admin.accounts.accountUpdated'));
       } else {
-        await accountApi.create(form.formData);
+        await accountApi.create(payload);
         showSuccess(t('admin.accounts.accountCreated'));
       }
       form.closeDialog();

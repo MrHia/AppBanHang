@@ -11,6 +11,7 @@ import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import WarehouseIcon from '@mui/icons-material/Warehouse';
 import LogoutIcon from '@mui/icons-material/Logout';
 import NotificationsIcon from '@mui/icons-material/Notifications';
+import VpnKeyIcon from '@mui/icons-material/VpnKey';
 import { useAuth } from 'src/contexts/auth-context';
 import { useRouter } from 'next/router';
 import { useLanguage } from 'src/i18n/LanguageContext';
@@ -205,6 +206,12 @@ export default function DashboardLayout({ children }) {
           )}
 
           <Typography variant="body2" sx={{ mr: 2 }}>{user?.firstName} {user?.lastName}</Typography>
+
+          <Tooltip title={t('changePassword.menuLabel', 'Đổi mật khẩu')}>
+            <IconButton color="inherit" onClick={() => router.push('/auth/change-password')} sx={{ mr: 1 }}>
+              <VpnKeyIcon />
+            </IconButton>
+          </Tooltip>
 
           <Button color="inherit" startIcon={<LogoutIcon />} onClick={handleLogout}>{t('common.logout')}</Button>
         </Toolbar>

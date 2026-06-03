@@ -79,8 +79,16 @@ export const AuthProvider = (props) => {
     dispatch({ type: HANDLERS.SIGN_OUT });
   };
 
+  // Cập nhật một phần thông tin user đang đăng nhập (vd: sau khi đổi mật khẩu xong,
+  // clear cờ mustChangePassword) — đồng bộ cả sessionStorage để reload không mất.
+  const updateUser = (partial) => {
+    const updated = { ...state.user, ...partial };
+    window.sessionStorage.setItem('user', JSON.stringify(updated));
+    dispatch({ type: HANDLERS.SIGN_IN, payload: updated });
+  };
+
   return (
-    <AuthContext.Provider value={{ ...state, signIn, signOut }}>
+    <AuthContext.Provider value={{ ...state, signIn, signOut, updateUser }}>
       {children}
     </AuthContext.Provider>
   );

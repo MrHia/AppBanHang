@@ -65,6 +65,20 @@
     "loginFailed": "Login failed",
     "testAccounts": "Test Accounts:"
   },
+  "changePassword": {
+    "title": "Change Password",
+    "menuLabel": "Change Password",
+    "oldPassword": "Current Password",
+    "newPassword": "New Password",
+    "confirmPassword": "Confirm New Password",
+    "submit": "Change Password",
+    "success": "Password changed successfully!",
+    "failed": "Failed to change password",
+    "mismatch": "Password confirmation does not match",
+    "tooShort": "New password must be at least 8 characters",
+    "sameAsOld": "New password must be different from the old one",
+    "firstLoginWarning": "You are using a temporary password. Please change it to continue."
+  },
   "admin": {
     "dashboard": {
       "title": "System Administration",
@@ -89,7 +103,9 @@
       "unlock": "Unlock",
       "resetPassword": "Reset Password",
       "firstName": "First Name",
-      "lastName": "Last Name"
+      "lastName": "Last Name",
+      "site": "Site",
+      "newPasswordOptional": "New Password (leave blank to keep current)"
     },
     "sites": {
       "title": "Site Management",

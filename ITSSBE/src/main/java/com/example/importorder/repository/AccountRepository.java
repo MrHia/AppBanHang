@@ -15,6 +15,9 @@ public interface AccountRepository extends JpaRepository<Account, Integer> {
     List<Account> findByRoleId(Integer roleId);
     List<Account> findByIsActiveTrue();
 
+    /** Đếm tài khoản theo tên vai trò (traversal account.role.name) — phục vụ ràng buộc role duy nhất. */
+    long countByRole_Name(String roleName);
+
     @Query("SELECT a FROM Account a LEFT JOIN FETCH a.role WHERE LOWER(a.email) = LOWER(:email)")
     Optional<Account> findByEmailWithRole(@Param("email") String email);
 }
