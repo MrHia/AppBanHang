@@ -28,7 +28,10 @@ public class AuthServiceImpl implements IAuthService {
     }
 
     @Override
-    @Transactional
+    // noRollbackFor: PHẢI giữ lại failedAttempts + trạng thái khoá ngay cả khi ném
+    // RuntimeException "sai mật khẩu". Nếu để mặc định, @Transactional sẽ rollback cú
+    // save() đếm số lần sai → tính năng khoá tài khoản sau 5 lần (UC1) không có tác dụng.
+    @Transactional(noRollbackFor = RuntimeException.class)
     public LoginResponse login(LoginRequest request) {
         String email = request.email() != null ? request.email().trim().toLowerCase() : "";
         Account account = accountRepository.findByEmailWithRole(email)
