@@ -2322,18 +2322,9 @@ public class StockSourceResolver {
 
 **Cấu trúc sau khi áp dụng:**
 
-```
-PurchaseOrderService.confirmPO()
-   └─→ eventPublisher.publishEvent(new POConfirmedEvent(po))
-            ↓
-         [Spring ApplicationContext]
-            ↓
-   ┌────────┼────────┐
-   ↓        ↓        ↓
-POAudit   PONotify  POEmail
-Listener  Listener  Listener
-(@TransactionalEventListener AFTER_COMMIT)
-```
+![Cấu trúc Observer Pattern — Service publish event, 3 Listener subscribe AFTER_COMMIT](images/diagram_16.png)
+
+Sơ đồ trên thể hiện rõ sự tách bạch: `PurchaseOrderService` chỉ làm một việc duy nhất là `publishEvent(...)`, không hề biết có ai đang lắng nghe. Spring `ApplicationContext` đóng vai trò Event Bus — tự định tuyến event tới đúng các listener đã subscribe. Mũi tên đứt nét (`-->`) thể hiện đây là loose coupling — listener có thể tăng giảm tuỳ ý mà service không cần thay đổi.
 
 **Lợi ích cụ thể:**
 

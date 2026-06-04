@@ -1,0 +1,20 @@
+flowchart TD
+  Svc["PurchaseOrderService.confirmPO()<br/><i>@Transactional</i>"]
+  Svc -->|"publishEvent(POConfirmedEvent)"| Bus["Spring ApplicationContext<br/>(Event Bus)"]
+
+  Bus -. "AFTER_COMMIT" .-> L1["POAuditListener"]
+  Bus -. "AFTER_COMMIT" .-> L2["PONotificationListener"]
+  Bus -. "AFTER_COMMIT" .-> L3["POEmailListener"]
+
+  L1 --> A1["auditService.log<br/>'PO_CONFIRMED'"]
+  L2 --> A2["notificationService<br/>.send(Overseas)"]
+  L3 --> A3["emailService<br/>.sendPOConfirmation"]
+
+  style Svc fill:#fff4e1
+  style Bus fill:#e1f0ff
+  style L1 fill:#e1ffe5
+  style L2 fill:#e1ffe5
+  style L3 fill:#e1ffe5
+  style A1 fill:#f5f5f5
+  style A2 fill:#f5f5f5
+  style A3 fill:#f5f5f5
