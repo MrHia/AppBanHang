@@ -1,0 +1,42 @@
+sequenceDiagram
+  actor Overseas as Overseas (Trịnh Đức Phương)
+  participant FE as Step4Matrix.js
+  participant Dialog as POCreateDialog.js
+  participant API as poApi (Axios)
+  participant Ctrl as POController
+  participant Svc as POBatchCreationService
+  participant State as POState (DraftState)
+  participant Repo as PurchaseOrderRepository
+  participant Bus as ApplicationEventPublisher
+  participant L1 as POAuditListener
+  participant L2 as PONotificationListener
+
+  Overseas->>FE: Phân chia SL cho từng Site (matrix)
+  Overseas->>FE: Click "Xem trước"
+  FE->>Dialog: Open preview dialog
+  Dialog-->>Overseas: Hiển thị N PO sẽ tạo + cảnh báo thiếu
+  Overseas->>Dialog: Click "Gửi đơn đặt hàng"
+  Dialog->>API: POST /api/po/batch
+  API->>Ctrl: createPOBatch(requestId, orders)
+  Ctrl->>Svc: createPOsFromInventory(...)
+
+  loop for each Site
+    Svc->>Svc: new PurchaseOrder(status=DRAFT)
+    Svc->>State: POStateRegistry.get(DRAFT)
+    Svc->>Repo: save(po)
+    Svc->>State: po.send() ← State Pattern transition
+    State->>State: applyTransition(SENT, SentState)
+    Svc->>Repo: save(po) [status=SENT]
+    Svc->>Bus: publishEvent(POSentEvent)
+  end
+
+  Note over Bus: Transaction commits (AFTER_COMMIT)
+  Bus->>L1: onPOSent(event)
+  L1->>L1: auditService.log("PO_SENT", ...)
+  Bus->>L2: onPOSent(event)
+  L2->>L2: notificationService.send to Site
+
+  Svc-->>Ctrl: List<PurchaseOrderDTO>
+  Ctrl-->>API: ApiResponse.ok(N POs)
+  API-->>Dialog: response
+  Dialog-->>Overseas: Hiện thông báo "Đã tạo N PO"

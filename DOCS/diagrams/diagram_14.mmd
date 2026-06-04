@@ -1,0 +1,49 @@
+flowchart TD
+  subgraph L1 [Layer 1 - API]
+    Controller[controller/<br/>13 RestController]
+  end
+
+  subgraph L2 [Layer 2 - Application]
+    Service[service/<br/>18 interfaces + 16 impl]
+    DTO[dto/<br/>30+ DTO classes]
+    Mapper[mapper/<br/>11 MapStruct mappers]
+  end
+
+  subgraph L3 [Layer 3 - Domain]
+    Entity[entity/<br/>18 JPA entities]
+    StateP[domain.po.state/<br/>State Pattern]
+    StrategyP[domain.inquiry.stocksource/<br/>Strategy Pattern]
+    ValidP[validation/<br/>Chain of Resp]
+  end
+
+  subgraph L4 [Layer 4 - Infrastructure]
+    Repo[repository/<br/>15 Spring Data]
+    Event[event/<br/>5 events]
+    Listener[listener/<br/>3 listeners]
+    Scheduler[scheduler/<br/>StockInquiryTimeoutScheduler]
+    Config[config/<br/>Security + Migration]
+  end
+
+  Controller --> Service
+  Controller --> DTO
+  Service --> Mapper
+  Service --> Entity
+  Service --> Repo
+  Service --> StateP
+  Service --> StrategyP
+  Service --> ValidP
+  Service --> Event
+  Mapper --> DTO
+  Mapper --> Entity
+  StateP --> Entity
+  StrategyP --> Entity
+  Listener --> Event
+  Listener --> Service
+  Scheduler --> Repo
+  Scheduler --> Event
+  Repo --> Entity
+
+  style L1 fill:#ffe5e5
+  style L2 fill:#fff4e1
+  style L3 fill:#e1ffe5
+  style L4 fill:#e1f0ff

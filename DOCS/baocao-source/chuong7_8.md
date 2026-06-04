@@ -307,6 +307,20 @@ Ngoài SOLID, nhóm em đã chủ động áp dụng 6 design pattern cụ thể
 
 ![State Diagram — PurchaseOrder Lifecycle](images/diagram_02.png)
 
+Ngoài Purchase Order, hệ thống còn hai state machine quan trọng khác cũng được nhóm em mô hình hoá qua sơ đồ trạng thái. Trên thực tế, hệ thống có tổng cộng 8 enum trạng thái (cho 8 entity khác nhau), nhưng chỉ có 3 cái dưới đây là có transition rule phức tạp đáng để vẽ sơ đồ:
+
+**State Diagram — ProcessRequest:**
+
+![State Diagram — ProcessRequest Lifecycle (PENDING → PROCESSING → DONE)](images/diagram_03.png)
+
+ProcessRequest có lifecycle khá đơn giản: Sales tạo (PENDING) → Overseas pick up xử lý (PROCESSING) → khi tất cả PO đã DONE thì YC cũng chuyển DONE. Có nhánh CANCELLED cho trường hợp huỷ thủ công.
+
+**State Diagram — StockInquiry:**
+
+![State Diagram — StockInquiry Lifecycle (với timeout 48h từ Scheduler)](images/diagram_04.png)
+
+StockInquiry phức tạp hơn — có hai cách kết thúc: Site phản hồi (RESPONDED hoặc qua trung gian PARTIAL), hoặc Scheduler tự đánh dấu TIMEOUT sau 48h. Đây là điểm khác biệt với hai state machine còn lại — có transition tự động không cần user trigger.
+
 **Lợi ích cụ thể:**
 
 - Mỗi state là một class riêng, dễ test độc lập (xem POStateTest ở Chương 6).

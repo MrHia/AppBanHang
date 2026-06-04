@@ -31,6 +31,12 @@ Backend được tổ chức thành 5 tầng theo nguyên tắc Separation of Co
 
 Mỗi tầng chỉ giao tiếp với tầng kề bên — Controller không bao giờ gọi thẳng Repository, Service không bao giờ trả Entity ra ngoài cho client (luôn convert sang DTO qua Mapper). Cách tổ chức này giúp khi nhóm thay đổi cấu trúc DB thì chỉ ảnh hưởng tới Entity + Repository, các tầng trên vẫn nguyên.
 
+Sơ đồ phụ thuộc package backend dưới đây minh hoạ cụ thể chiều dependency giữa các tầng. Các tầng được tô màu để dễ nhận biết — đỏ (API) → vàng (Application) → xanh lá (Domain) → xanh dương (Infrastructure):
+
+![Sơ đồ phụ thuộc package backend (4 tầng)](images/diagram_14.png)
+
+Như sơ đồ thể hiện, dependency chỉ đi một chiều từ trên xuống — không có cạnh đi ngược từ Infrastructure lên Application. Trong những trường hợp ngoại lệ cần "đảo chiều" (vd Listener phải gọi Service), nhóm em dùng Spring DI để inject interface, không inject implementation cụ thể — đây cũng là cách áp dụng nguyên lý DIP đã đề cập ở Chương 7.
+
 ### 1.2 Bounded Contexts (Phân vùng nghiệp vụ)
 
 Do hệ thống có nhiều nghiệp vụ khá khác biệt (quản lý danh mục, đặt hàng, kho, thông báo), nhóm em áp dụng tư tưởng Domain-Driven Design — chia thành 4 bounded context:
@@ -67,6 +73,10 @@ ITSSFE/src/
 
 Frontend dùng Next.js Pages Router (không phải App Router) vì version 14 vẫn ổn định trên Pages Router và nhóm đã quen cú pháp này hơn. Mỗi role có một thư mục riêng trong `pages/`, dễ phân quyền và phân công công việc giữa các thành viên.
 
+Sau khi áp dụng pattern Custom Hook + Compound Component (chi tiết ở Chương 7), kiến trúc frontend được tái cấu trúc thành 3 tầng rõ ràng: Pages (thin routing) → Features (logic gộp) → Primitives (component dùng chung):
+
+![Kiến trúc Frontend sau refactor — Pages, Features, Primitives](images/diagram_09.png)
+
 ## 2. Thiết kế phân tích cho các Use Case tiêu biểu
 
 Phần này nhóm em vẽ biểu đồ tuần tự (sequence diagram) và biểu đồ lớp phân tích (analysis class diagram) cho 5 use case tiêu biểu nhất. Các use case CRUD đơn giản (UC01, UC02, UC09) sẽ tuân theo cùng pattern, nhóm em sẽ chỉ vẽ một lần làm đại diện.
@@ -97,25 +107,13 @@ Phần này nhóm em vẽ biểu đồ tuần tự (sequence diagram) và biểu
 
 **Biểu đồ tuần tự (Sequence Diagram) — Tạo PO batch:**
 
-```
-Overseas → Step4Matrix:        Phân chia SL từ matrix
-Step4Matrix → POCreateDialog:  Hiển thị preview
-POCreateDialog → poApi:        POST /api/po/batch
-poApi → POController:          Forward request
-POController → POBatchCreationService.createPOsFromInventory()
-  ├→ for each Site:
-  │    ├→ new PurchaseOrder(status=DRAFT, ...)
-  │    ├→ POStateRegistry.get(DRAFT) → state init
-  │    ├→ for each item: new PODetail(...)
-  │    └→ purchaseOrderRepository.save(po)
-  ├→ for each PO: po.send() ← State Pattern transition
-  │    ├→ DraftState.send(po)
-  │    └→ po.applyTransition(SENT, SentState)
-  └→ eventPublisher.publishEvent(new POSentEvent(po)) × N
-POController → return ApiResponse.ok(List<PurchaseOrderDTO>)
-```
+![Sequence Diagram chi tiết — UC11 Tạo PO batch (Overseas → POBatchCreationService → State + Event)](images/diagram_13.png)
 
-Sau khi response trả về frontend, các listener `POAuditListener`, `PONotificationListener`, `POEmailListener` được kích hoạt asynchronously (AFTER_COMMIT). Chi tiết về Observer pattern xem ở Chương 7.
+Sơ đồ trên thể hiện đầy đủ luồng từ thao tác của Overseas trên giao diện (Step4Matrix) đến tận lúc các listener xử lý event sau khi transaction commit. Có vài điểm đáng chú ý:
+
+- Loop "for each Site" được thực hiện trong cùng một transaction — đảm bảo atomic: hoặc tất cả PO được tạo, hoặc không có cái nào.
+- `po.send()` không trực tiếp set `status = SENT` — nó delegate qua `state.send(po)` (State Pattern). Đây là điểm khác biệt với code cũ trước refactor.
+- Các listener (`POAuditListener`, `PONotificationListener`, `POEmailListener`) chỉ chạy sau khi transaction commit thành công (`AFTER_COMMIT`). Nếu rollback ở giữa thì các side-effect này không được thực hiện — tránh trường hợp gửi email báo "đã tạo PO" trong khi DB không có gì.
 
 ### 2.3 UC15 — Xác nhận/từ chối đơn đặt hàng (Site)
 
@@ -213,7 +211,11 @@ Hệ thống có tổng cộng 27 trang chính chia theo 5 nhóm vai trò. Nhóm
 
 Sau khi đăng nhập, người dùng được điều hướng tới dashboard tương ứng với vai trò. Từ dashboard, sidebar hiển thị menu các chức năng mà vai trò đó có quyền sử dụng.
 
-Ví dụ luồng điều hướng của Overseas:
+Sơ đồ chuyển đổi màn hình cho vai trò Overseas (vai trò có nhiều màn hình nhất, từ dashboard qua xử lý YC 4 step rồi tới tạo PO):
+
+![Sơ đồ chuyển đổi màn hình của vai trò Overseas](images/diagram_12.png)
+
+Văn bản hoá luồng tương ứng:
 
 ```
 login → /overseas/dashboard

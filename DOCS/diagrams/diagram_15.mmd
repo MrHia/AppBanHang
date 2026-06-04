@@ -1,0 +1,52 @@
+flowchart TD
+  Admin([Admin])
+
+  subgraph Account [UC01 - Quản lý tài khoản]
+    UC01a[Xem DS tài khoản]
+    UC01b[Tạo tài khoản mới]
+    UC01c[Sửa tài khoản]
+    UC01d[Khoá/Mở khoá]
+    UC01e[Reset mật khẩu]
+  end
+
+  subgraph Site [UC03 - Quản lý Site]
+    UC03a[Xem DS Site]
+    UC03b[Thêm Site<br/>+ tự tạo TK SITE]
+    UC03c[Sửa Site]
+    UC03d[Vô hiệu hoá Site]
+  end
+
+  subgraph PO [UC11 - Quản lý đơn đặt hàng - Phương]
+    UC11a[Xem matrix tồn kho]
+    UC11b[Phân chia SL từng Site]
+    UC11c[Chọn delivery means]
+    UC11d[Lưu nháp DRAFT]
+    UC11e[Xem trước]
+    UC11f[Gửi đơn - SENT]
+  end
+
+  Admin --> UC01a
+  Admin --> UC01b
+  Admin --> UC01c
+  Admin --> UC01d
+  Admin --> UC01e
+
+  Admin --> UC03a
+  Admin --> UC03b
+  Admin --> UC03c
+  Admin --> UC03d
+
+  Overseas([Overseas]) --> UC03a
+  Overseas --> UC03b
+  Overseas --> UC11a
+  Overseas --> UC11b
+  Overseas --> UC11c
+  Overseas --> UC11d
+  Overseas --> UC11e
+  Overseas --> UC11f
+
+  UC11d -.includes.-> UC11e
+  UC11e -.includes.-> UC11f
+  UC03b -.includes.-> UC01b
+
+  style PO fill:#fff4e1

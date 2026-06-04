@@ -1,0 +1,24 @@
+flowchart LR
+  Login["auth/login"] --> Dashboard["overseas/dashboard"]
+  Dashboard --> Requests["overseas/requests<br/>UC05 - Xem DS YC"]
+  Requests --> ProcessReq["overseas/process-request/id<br/>UC07 - 4 step"]
+
+  subgraph UC07Steps ["4 Step trong UC07"]
+    Step1["Step 1: Assign Sites"]
+    Step2["Step 2: Send Inquiries"]
+    Step3["Step 3: Track Responses"]
+    Step4["Step 4: Inventory Matrix"]
+    Step1 --> Step2
+    Step2 --> Step3
+    Step3 --> Step4
+  end
+
+  ProcessReq --> Step1
+  Step4 --> POs["overseas/purchase-orders<br/>UC11 - DS PO"]
+  POs --> Matrix["overseas/order-matrix/id<br/>Chi tiết tạo PO batch"]
+  Dashboard --> POs
+  Dashboard --> ChangePass["auth/change-password"]
+
+  style Step4 fill:#e1f5ff
+  style POs fill:#fff4e1
+  style Matrix fill:#fff4e1
