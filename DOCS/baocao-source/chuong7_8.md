@@ -219,7 +219,7 @@ Trong project, các implementation của interface đều có thể thay thế c
 
 | STT | Related modules | Mô tả áp dụng LSP |
 |-----|-----------------|-------------------|
-| 1 | IPurchaseOrderService | Bất kỳ implementation nào (production hoặc mock test) đều thay thế được. Test class dùng `@MockBean IPurchaseOrderService` thay vì `@MockBean PurchaseOrderServiceImpl` |
+| 1 | IPurchaseOrderService | Bất kỳ implementation nào cũng có thể thay thế được. Controller chỉ phụ thuộc vào interface, không phụ thuộc class cụ thể. Khi có nhiều impl khác nhau (vd thêm `PurchaseOrderServiceImplWithCaching`), chỉ cần swap qua Spring `@Primary` mà không cần sửa controller. |
 | 2 | POState interface | 5 state class đều implement 5 method giống nhau — chương trình gọi `state.confirm()` không cần biết là state nào |
 | 3 | StockSource interface | 3 strategy đều có cùng signature, resolver gọi `source.resolve()` không phân biệt |
 | 4 | AssignmentValidator | Mọi validator chỉ throw exception (không return value bất thường) — đảm bảo behavior consistency |
@@ -266,23 +266,9 @@ public class PurchaseOrderController {
 | 2 | StockSourceResolver | Inject `List<StockSource>` (interface), Spring tự đưa các impl vào |
 | 3 | AssignmentValidationService | Inject `List<AssignmentValidator>` (interface) — không phụ thuộc validator cụ thể nào |
 | 4 | PurchaseOrderServiceImpl | Phụ thuộc `ApplicationEventPublisher` (interface Spring), không gọi trực tiếp Notification/Email/Audit service |
-| 5 | PONotificationListener | Phụ thuộc `INotificationService` interface, dễ swap impl khi cần (vd test mock) |
+| 5 | PONotificationListener | Phụ thuộc `INotificationService` interface, dễ swap implementation khi sau này muốn đổi từ in-app notification sang Slack hoặc SMS |
 
-Nhờ DIP, khi nhóm em test, có thể dễ dàng mock các dependency:
-
-```java
-@SpringBootTest
-class PurchaseOrderServiceTest {
-    @MockBean ApplicationEventPublisher publisher;
-    @Autowired IPurchaseOrderService poService;
-
-    @Test
-    void confirmPO_publishesEvent() {
-        poService.confirmPO(1);
-        verify(publisher).publishEvent(any(POConfirmedEvent.class));
-    }
-}
-```
+Nhờ DIP, code của các tầng trên hoàn toàn không bị ràng buộc với một implementation cụ thể nào ở tầng dưới. Ví dụ nếu mai sau công ty đổi từ MySQL sang PostgreSQL, hoặc đổi cách gửi email từ SMTP sang AWS SES, các tầng Controller và Service không cần sửa — chỉ có `application.properties` và một vài bean configuration thay đổi.
 
 ## 7.3 Các Design Pattern đã áp dụng
 
@@ -323,8 +309,8 @@ StockInquiry phức tạp hơn — có hai cách kết thúc: Site phản hồi 
 
 **Lợi ích cụ thể:**
 
-- Mỗi state là một class riêng, dễ test độc lập (xem POStateTest ở Chương 6).
-- Thêm trạng thái mới (vd SHIPPED) chỉ cần thêm 1 class.
+- Mỗi state là một class riêng, dễ kiểm thử và dễ đọc lại sau này.
+- Thêm trạng thái mới (vd SHIPPED) chỉ cần thêm 1 class, không cần sửa code cũ.
 - Logic transition gom về một chỗ duy nhất cho mỗi state, dễ đọc hơn nhiều so với `switch-case` trải khắp service.
 
 **Đoạn code minh hoạ `ConfirmedState`:**
@@ -447,8 +433,8 @@ AssignmentValidationService
 
 **Lợi ích cụ thể:**
 
-- Mỗi validator là một class riêng, test độc lập (xem `AssignmentValidationTest`).
-- Thêm rule mới chỉ cần thêm 1 class + `@Order`.
+- Mỗi validator là một class riêng, đảm nhiệm đúng một rule duy nhất.
+- Thêm rule mới chỉ cần thêm 1 class + `@Order` — không sửa các validator có sẵn.
 - Code dễ đọc, mỗi class < 20 dòng.
 
 ### Pattern 5 — Custom Hook + Compound Component (Frontend)
@@ -721,7 +707,7 @@ Trong quá trình thực hiện bài tập lớn, nhóm em đã chia thành các
 | 11 | Implement UC18, UC19 (Warehouse + Discrepancy) | Tuấn Anh |
 | 12 | Refactor — áp dụng State, ISP split, Mapper | Cả nhóm |
 | 13 | Refactor frontend — Custom Hooks + Compound Components | Phương, Khánh Duy |
-| 14 | Viết unit test, manual UI test, ghi lại test case | Cả nhóm |
+| 14 | Kiểm thử use case theo từng vai trò, ghi lại test case + fix bug phát hiện | Cả nhóm |
 | 15 | Viết báo cáo, vẽ lại diagram chính thức, làm slide thuyết trình | Cả nhóm |
 
 ## % Đóng góp của các thành viên

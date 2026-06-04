@@ -20,8 +20,6 @@ Phần này nhóm em liệt kê chi tiết các công nghệ đã chọn cho c�
 | Object mapping | MapStruct (annotation processor) | 1.5.5 |
 | Reduce boilerplate | Lombok | 1.18.30 |
 | Build tool | Apache Maven | 3.9+ |
-| Test framework | Spring Boot Test + JUnit 5 | 5.10 |
-| Mocking | Mockito | 5.x |
 
 **Vì sao chọn Spring Boot 3.1 thay vì 3.2+?** Phiên bản 3.1 đã ổn định, có tài liệu tham khảo nhiều và tương thích tốt với Java 17 LTS. Phiên bản 3.2 lúc nhóm em bắt đầu vẫn còn khá mới và có một số breaking change với Spring Security.
 
@@ -35,7 +33,6 @@ Phần này nhóm em liệt kê chi tiết các công nghệ đã chọn cho c�
 | HTTP Client | Axios | 1.6 |
 | Styling | Emotion (đi kèm MUI) | 11.11 |
 | State management | React Context API + Custom Hooks | (native) |
-| Test framework | Vitest | 4.1 |
 | Routing | Next.js file-based | (native) |
 | i18n | Custom (LanguageContext) | self-built |
 
@@ -62,7 +59,6 @@ Phần này nhóm em liệt kê chi tiết các công nghệ đã chọn cho c�
 AppBanHang/
 ├── ITSSBE/                # Backend Spring Boot
 │   ├── src/main/java/...  # Source code chính
-│   ├── src/test/java/...  # Test code
 │   ├── pom.xml            # Maven config
 │   └── src/main/resources/
 │       └── application.properties
@@ -103,7 +99,7 @@ ITSSBE/src/main/java/com/example/importorder/
 │           └── POBatchCreationServiceImpl.java
 ├── domain/                       ← Business logic (Patterns)
 │   ├── po/
-│   │   └── state/                ← 6 file State Pattern
+│   │   └── state/                ← 7 file State Pattern
 │   │       ├── POState.java         (interface)
 │   │       ├── DraftState.java
 │   │       ├── SentState.java
@@ -385,99 +381,22 @@ export function useCRUDTable({ fetchAll, intervalMs = 15000 }) {
 
 ## 1. Tổng quan chiến lược kiểm thử
 
-Trong project này, nhóm em thực hiện kiểm thử ở hai cấp độ:
+Trong project này, nhóm em chọn cách tiếp cận kiểm thử theo use case — tức là test trực tiếp từ giao diện người dùng cuối, đi qua từng luồng nghiệp vụ chính của hệ thống. Cách làm này phù hợp với một dự án quy mô bài tập lớn, có giao diện đầy đủ và đặc biệt là có nhiều vai trò (Admin, Sales, Overseas, Site, Warehouse) — mỗi vai trò cần được thử nghiệm trong môi trường thực tế của họ.
 
-- **Unit Test:** kiểm thử từng đơn vị (method, class) một cách độc lập, sử dụng JUnit 5 và Mockito.
-- **Test giao diện (Manual UI Test):** kiểm thử các use case từ góc nhìn người dùng cuối, ghi lại các bước thực hiện và kết quả.
+Với mỗi chức năng, nhóm em tiến hành như sau:
 
-Với phần unit test, nhóm em đặc biệt tập trung vào các thành phần có business logic phức tạp — đặc biệt là State Pattern, Chain of Responsibility, và Strategy Pattern. Đây là những chỗ có nhiều nhánh xử lý nên dễ phát sinh bug nếu không test cẩn thận.
+- Liệt kê các kịch bản test (happy path + một số kịch bản lỗi tiêu biểu).
+- Ghi rõ các bước thao tác trên UI.
+- Quan sát kết quả thực tế và so sánh với kết quả mong đợi.
+- Đánh giá Pass/Fail. Nếu Fail thì ghi nhận lại để fix.
 
-Tổng số test case đã viết: **46 unit test**, tất cả đang ở trạng thái pass.
+Nhóm em đặc biệt chú ý tới các kịch bản "vượt ranh giới" như: nhập số lượng âm, để trống trường bắt buộc, đăng nhập sai mật khẩu nhiều lần, Site phản hồi quá hạn 48h, hàng nhận về thiếu so với đơn đặt... Những kịch bản này khá phổ biến trong thực tế và là chỗ dễ phát sinh bug nếu code không xử lý cẩn thận.
 
-## 2. Kiểm thử đơn vị (JUnit)
-
-### 2.1 Test cho State Pattern — POStateTest
-
-Lớp test này kiểm tra tất cả các transition hợp lệ và không hợp lệ của Purchase Order. Đây là phần nhóm em đầu tư nhiều nhất vì State Pattern liên quan trực tiếp đến vòng đời PO.
-
-Phương pháp áp dụng: **Black-box testing** kết hợp với **White-box testing (độ phủ C1 — coverage statement)**.
-
-**Black-box test cases:**
-
-| STT | Test name | Input | Expected output |
-|-----|-----------|-------|------------------|
-| 1 | draft_canSend | PO ở DRAFT, gọi send() | Status chuyển SENT |
-| 2 | draft_cannotConfirm | PO ở DRAFT, gọi confirm() | Throw IllegalStateException |
-| 3 | sent_canConfirm | PO ở SENT, gọi confirm() | Status chuyển CONFIRMED |
-| 4 | sent_canReject | PO ở SENT, gọi reject(reason) | Status chuyển REJECTED, lưu reason |
-| 5 | rejected_canReset | PO ở REJECTED, gọi resetFromRejected() | Status chuyển DRAFT, **vẫn giữ rejection reason** |
-| 6 | confirmed_canMarkDone | PO ở CONFIRMED, gọi markDone() | Status chuyển DONE |
-| 7 | confirmed_cannotReject | PO ở CONFIRMED, gọi reject() | Throw IllegalStateException |
-| 8 | done_cannotChange | PO ở DONE, gọi bất kỳ transition | Throw IllegalStateException |
-| 9 | postLoad_initializesState | Load PO từ DB | Field `state` được khởi tạo đúng theo `status` |
-
-**White-box (C1 coverage) cho `ConfirmedState`:**
-
-Class `ConfirmedState` có 5 method, mỗi method là 1 nhánh thực thi (statement). Để đạt C1 coverage 100%, cần ít nhất 5 test:
-
-```java
-@Test void confirmedState_send_throws()         { /* nhánh 1 */ }
-@Test void confirmedState_confirm_throws()      { /* nhánh 2 */ }
-@Test void confirmedState_reject_throws()       { /* nhánh 3 */ }
-@Test void confirmedState_reset_throws()        { /* nhánh 4 */ }
-@Test void confirmedState_markDone_transitions(){ /* nhánh 5 */ }
-```
-
-Sau khi áp dụng cả hai kỹ thuật, nhóm em phát hiện được một bug: ban đầu nhóm quên implement `@PostLoad` cho `initState()`, dẫn đến PO load từ DB không có state object. Test #9 ở trên đã phát hiện ra điều này.
-
-**Tên class kiểm thử tự động đầy đủ:** `com.example.importorder.domain.po.state.POStateTest`
-
-### 2.2 Test cho Chain of Responsibility — AssignmentValidationTest
-
-| STT | Test name | Input | Expected |
-|-----|-----------|-------|----------|
-| 1 | empty_throws | assignments rỗng | NonEmptyValidator throws |
-| 2 | duplicate_throws | 2 assignment cùng MH | NoDuplicatesValidator throws |
-| 3 | incomplete_throws | YC có MH X, không có assignment cho X | CompletenessValidator throws |
-| 4 | nonMember_throws | assign MH không thuộc YC | MembershipValidator throws |
-| 5 | allValid_passes | Đầy đủ và đúng | runAll() không throw |
-
-**Tên class:** `com.example.importorder.validation.AssignmentValidationTest`
-
-### 2.3 Test cho Strategy Pattern — StockSourceTest
-
-| STT | Test name | Input | Expected |
-|-----|-----------|-------|----------|
-| 1 | inquiryResponse_provides | Có response của Site | Trả về quantity từ response |
-| 2 | reference_fallback | Không có response, có site_merchandise | Trả về stock từ reference |
-| 3 | noData_returnsZero | Không có cả response lẫn reference | Trả về 0 |
-| 4 | resolver_picksFirstMatch | Cả 3 source đều có | Pick InquiryResponse (cao nhất) |
-
-**Tên class:** `com.example.importorder.domain.inquiry.stocksource.StockSourceTest`
-
-### 2.4 Test cho Observer Pattern — POEventPublishTest
-
-Test này verify rằng khi gọi `confirmPO()`, event `POConfirmedEvent` được publish đúng. Dùng `@SpringBootTest` để load context và `@MockBean` cho ApplicationEventPublisher.
-
-| STT | Test name | Action | Expected |
-|-----|-----------|--------|----------|
-| 1 | confirm_publishesEvent | poService.confirmPO(id) | eventPublisher.publishEvent() được gọi 1 lần với POConfirmedEvent |
-| 2 | reject_publishesEvent | poService.rejectPO(id, "reason") | publishEvent với PORejectedEvent |
-| 3 | listenersCalledAfterCommit | Trong @Transactional | Listener chỉ chạy sau khi commit |
-
-**Tên class:** `com.example.importorder.event.POEventPublishTest`
-
-### 2.5 Các test khác
-
-- `AuthLoginIntegrationTest` — Integration test cho luồng login đầy đủ
-- `AccountServiceTest` — Unit test cho service CRUD account + hash mật khẩu BCrypt
-- `PurchaseOrderMapperTest` — Test mapper Entity ↔ DTO
-
-## 3. Kiểm thử Use Case (Manual UI Test)
+## 2. Kiểm thử theo từng chức năng
 
 Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho từng chức năng chính của hệ thống. Mỗi test case ghi rõ các bước thực hiện và kết quả mong đợi.
 
-### 3.1 Chức năng Đăng nhập
+### 2.1 Chức năng Đăng nhập
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -488,7 +407,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 5 | Sai mật khẩu 5 lần | Nhập sai 5 lần liên tiếp | Tài khoản bị khoá 30 phút | Pass |
 | 6 | Đăng nhập với tài khoản mới | Tài khoản mới có `must_change_password=true` | Tự chuyển sang trang đổi mật khẩu | Pass |
 
-### 3.2 Chức năng Quản lý tài khoản (UC01)
+### 2.2 Chức năng Quản lý tài khoản (UC01)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -501,7 +420,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 7 | Reset mật khẩu | Click "Reset MK" | Sinh MK tạm, gửi email cho user | Pass |
 | 8 | Tìm kiếm tài khoản | Nhập từ khoá vào ô search | Hiển thị danh sách phù hợp | Pass |
 
-### 3.3 Chức năng Quản lý mặt hàng (UC02)
+### 2.3 Chức năng Quản lý mặt hàng (UC02)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -511,7 +430,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 4 | Xoá mềm | Click "Vô hiệu" | is_active=false, không xoá thật | Pass |
 | 5 | Sales chỉ xem | Login Sales, vào trang mặt hàng | Chỉ thấy danh sách, không có nút Thêm/Sửa | Pass |
 
-### 3.4 Chức năng Quản lý Site (UC03)
+### 2.4 Chức năng Quản lý Site (UC03)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -520,7 +439,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 3 | Sửa Site | Đổi email, SĐT | Lưu thành công | Pass |
 | 4 | Vô hiệu hoá Site | Click vô hiệu | Site không xuất hiện khi Overseas tìm | Pass |
 
-### 3.5 Chức năng Tạo yêu cầu đặt hàng (UC04 — Sales)
+### 2.5 Chức năng Tạo yêu cầu đặt hàng (UC04 — Sales)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -531,7 +450,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 5 | Gửi YC rỗng | Không thêm MH nào, bấm Gửi | Không cho gửi | Pass |
 | 6 | Xem lịch sử YC | Mở my-requests | Hiển thị các YC của user | Pass |
 
-### 3.6 Chức năng Xử lý YC đặt hàng (UC07 — Overseas)
+### 2.6 Chức năng Xử lý YC đặt hàng (UC07 — Overseas)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -542,7 +461,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 5 | Gửi lại inquiry | Sau timeout, bấm gửi lại | Reset 48h, status PENDING | Pass |
 | 6 | Quay lại step trước | Bấm step trước trong stepper | Cho phép quay lại, có cảnh báo mất data | Pass |
 
-### 3.7 Chức năng Quản lý đơn đặt hàng (UC11 — Overseas)
+### 2.7 Chức năng Quản lý đơn đặt hàng (UC11 — Overseas)
 
 Đây là UC do Trịnh Đức Phương phụ trách. Test case chi tiết hơn:
 
@@ -557,7 +476,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 7 | Gửi PO phát event | Sau khi gửi | Notification được tạo cho Site, audit log ghi | Pass |
 | 8 | Xem chi tiết PO | Click 1 PO trên danh sách | Hiển thị đầy đủ items, status, ngày giao | Pass |
 
-### 3.8 Chức năng Phản hồi tồn kho (UC10 — Site)
+### 2.8 Chức năng Phản hồi tồn kho (UC10 — Site)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -566,7 +485,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 3 | Cập nhật lại | Sau PARTIAL, điền thêm MH | Cập nhật được, có thể chuyển RESPONDED | Pass |
 | 4 | Site khác không thấy | Login Site khác, vào danh sách inquiry | Chỉ thấy inquiry gửi tới Site này | Pass |
 
-### 3.9 Chức năng Xác nhận/từ chối PO (UC15 — Site)
+### 2.9 Chức năng Xác nhận/từ chối PO (UC15 — Site)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -576,7 +495,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 4 | Xác nhận PO đã CONFIRMED | Click xác nhận lại | Không cho phép | Pass |
 | 5 | Site chỉ thấy PO của mình | Login Site US, vào danh sách | Chỉ thấy PO gửi tới Site US | Pass |
 
-### 3.10 Chức năng Nhận hàng tại kho (UC18 — Warehouse)
+### 2.10 Chức năng Nhận hàng tại kho (UC18 — Warehouse)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -586,7 +505,7 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 4 | Nhận PO chưa CONFIRMED | Cố nhận PO SENT | Không cho phép | Pass |
 | 5 | Nhận PO đã DONE | Cố nhận PO DONE | Từ chối, đã được khoá | Pass |
 
-### 3.11 Chức năng Xử lý chênh lệch (UC19 — Warehouse + Site)
+### 2.11 Chức năng Xử lý chênh lệch (UC19 — Warehouse + Site)
 
 | STT | Mô tả testcase | Các bước thực hiện | Kết quả | Đánh giá |
 |-----|----------------|---------------------|---------|----------|
@@ -595,15 +514,16 @@ Phần này nhóm em mô tả các test case từ góc nhìn người dùng cho 
 | 3 | Đánh dấu giải quyết | Warehouse click "Đã giải quyết" | Discrepancy chuyển RESOLVED, PO DONE | Pass |
 | 4 | Site khác không thấy | Login Site khác | Không thấy discrepancy này | Pass |
 
-## 4. Đánh giá tổng kết kiểm thử
+## 3. Đánh giá tổng kết kiểm thử
 
-Sau khi chạy đầy đủ unit test và manual UI test, nhóm em đánh giá:
+Sau khi chạy đầy đủ các kịch bản test ở trên, nhóm em đánh giá:
 
-- **Tỷ lệ pass:** 46/46 unit test pass (100%). Tất cả các luồng UI manual đều chạy đúng kỳ vọng.
-- **Bug phát hiện trong quá trình test:**
-  - Ban đầu, khi PO từ REJECTED reset về DRAFT thì rejection_reason bị mất → đã fix bằng cách giữ field này trong `RejectedState.resetFromRejected()`.
-  - Khi gửi nhiều PO cùng lúc, mã PO có thể trùng do bug ở generator → đã fix bằng cách dùng database sequence + Date.
-  - Listener cũ chạy ngay trong transaction → khi email server down thì rollback luôn cả PO. Đã fix bằng cách chuyển sang `@TransactionalEventListener(AFTER_COMMIT)`.
+- **Tỷ lệ pass:** Tất cả các luồng nghiệp vụ chính đều chạy đúng kỳ vọng. Một số kịch bản "vượt ranh giới" (số lượng âm, thiếu trường bắt buộc, vượt tồn kho, ...) đều được validate và hiện thông báo lỗi rõ ràng.
+- **Một số bug phát hiện và đã sửa trong quá trình kiểm thử:**
+  - Ban đầu, khi PO từ REJECTED reset về DRAFT thì rejection_reason bị mất → đã fix bằng cách giữ field này trong `RejectedState.resetFromRejected()` (State Pattern).
+  - Khi tạo nhiều PO trong cùng một giây, mã PO có thể bị trùng do bug ở generator → đã fix bằng cách dùng database sequence kết hợp với timestamp.
+  - Listener cũ chạy ngay trong transaction → khi email server tạm thời không phản hồi thì rollback luôn cả PO. Đã fix bằng cách chuyển sang `@TransactionalEventListener(AFTER_COMMIT)` để side-effect chỉ chạy sau khi transaction commit thành công.
+  - Một số trang admin (accounts, sites, merchandise) trước refactor có ~95% code giống nhau, dẫn tới khi sửa bug ở một trang phải nhớ sửa cả 3 — nguy cơ miss rất cao. Đã giải quyết bằng cách extract ra Custom Hook (`useCRUDTable`) và Compound Component (`<DataTable>`).
 
-Nhóm em rút ra kết luận: việc viết test sớm (test-driven hoặc test ngay sau khi code) thực sự hữu ích — phát hiện được khá nhiều lỗi mà nếu chỉ test thủ công ở giao diện thì rất khó nhìn ra.
+Nhóm em rút ra kết luận: kiểm thử theo use case từ phía người dùng cuối là cách hiệu quả nhất để phát hiện các lỗi liên quan đến luồng nghiệp vụ — đặc biệt là những bug "qua lại" giữa nhiều vai trò (vd: Site từ chối PO làm Overseas mất rejection reason). Với những bug logic phức tạp (như race condition khi tạo nhiều PO cùng lúc), nhóm phải kết hợp đọc lại code cẩn thận chứ test giao diện đơn lẻ khó thấy ra.
 
