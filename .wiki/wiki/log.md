@@ -73,3 +73,23 @@ Chronological record of all wiki operations.
   - ISP interfaces aligned: 5 helpers + 1 core
   - Effort bumped realistic: total ~10 weeks
   - All broken wikilinks fixed
+
+## [2026-06-04] feature | Account management mở rộng (UC1 ext)
+- Code: AccountServiceImpl (edit password/role/site + role cardinality), AuthServiceImpl,
+  AccountRepository.countByRole_Name, FE change-password page + ProtectedRoute enforce +
+  admin/accounts site picker. Commit `5ce01ef`.
+- Pages updated: [[features/uc1-auth-lifecycle]] (v1.2 ext section)
+- Pages created: [[decisions/role-cardinality]]
+- Claims: c-20260604-02, c-20260604-03, c-20260604-04
+
+## [2026-06-04] bugfix | Account lockout @Transactional rollback (test caught it)
+- Integration test AuthLoginIntegrationTest (H2) bắt được bug: failed_attempts không tăng
+- Root cause: @Transactional rollback cú save() khi login ném RuntimeException
+- Fix: @Transactional(noRollbackFor=RuntimeException.class). Commit `17cec57`.
+- Pages created: [[bugs/login-lockout-rollback]]
+- Claims: c-20260604-01
+
+## [2026-06-04] verify | Demo login trên Docker MySQL
+- `docker compose up -d db` + backend local + curl: login đa role, lockout, change-password
+- Claims: c-20260604-05
+- Pages updated: [[index]] (link bug + decision mới)

@@ -154,3 +154,32 @@ Cross-page factual claims with citations. Each entry must cite a source page or 
 - **Status**: active
 - **First seen**: 2026-06-03
 - **Notes**: Hardcoded — refactor cần config qua env var cho prod domain.
+
+#### c-20260604-01 — Account lockout từng vô hiệu do @Transactional rollback; fix bằng noRollbackFor
+- **Sources**: `ITSSBE/.../service/impl/AuthServiceImpl.java`, [[bugs/login-lockout-rollback]], commit `17cec57`
+- **Status**: active (resolved bug)
+- **First seen**: 2026-06-04
+- **Notes**: `login` save() failedAttempts rồi throw RuntimeException → rollback → counter mãi 0. `@Transactional(noRollbackFor=RuntimeException.class)` fix. Verified trên Docker MySQL: 1→2→3→4→5 + locked_until set.
+
+#### c-20260604-02 — Role cardinality: ADMIN/OVERSEAS/WAREHOUSE duy nhất; SITE/SALES nhiều
+- **Sources**: `AccountServiceImpl.assertRoleCardinality`, `AccountRepository.countByRole_Name`, [[decisions/role-cardinality]]
+- **Status**: active
+- **First seen**: 2026-06-04
+- **Notes**: Đếm TẤT CẢ account của role (kể cả khóa). Enforce ở create + update; FE ẩn role duy nhất đã tồn tại.
+
+#### c-20260604-03 — 2 luồng đổi mật khẩu admin: reset (auto-gen + buộc đổi) vs update (gõ tay, không buộc đổi)
+- **Sources**: `AccountServiceImpl.resetPassword` vs `AccountServiceImpl.update`, [[features/uc1-auth-lifecycle]]
+- **Status**: active
+- **First seen**: 2026-06-04
+
+#### c-20260604-04 — FE enforce first-login: ProtectedRoute + login redirect tới /auth/change-password
+- **Sources**: `ITSSFE/src/components/ProtectedRoute.js`, `pages/auth/login.js`, `pages/auth/change-password.js`
+- **Status**: active
+- **First seen**: 2026-06-04
+- **Notes**: change-password page KHÔNG bọc ProtectedRoute → tránh redirect loop. `auth-context.updateUser()` clear cờ sau khi đổi.
+
+#### c-20260604-05 — Login verified chạy thật trên Docker MySQL (compose `db`)
+- **Sources**: Demo session 2026-06-04 (`docker compose up -d db` + backend local + curl)
+- **Status**: active
+- **First seen**: 2026-06-04
+- **Notes**: Seed passwords đã là BCrypt `$2a$10$` trong schema.sql. Verified: login đa role, sai mật khẩu, lockout (failed_attempts persist), change-password + must-change flow.

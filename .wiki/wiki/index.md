@@ -45,10 +45,12 @@ Master catalog. Read first to find relevant pages.
 
 ## Decisions
 - [[decisions/bcrypt-password-hashing]] — Adopted v1.1.0, strength 10
+- [[decisions/role-cardinality]] — ADMIN/OVERSEAS/WAREHOUSE duy nhất, SITE/SALES nhiều (2026-06-04)
 
 ## Bugs
 - [[bugs/rejectpo-loses-reason]] — FIXED v1.1.0, motivates State pattern in refactor
 - [[bugs/discrepancy-field-mismatch]] — FIXED v1.1.0, motivates contract testing
+- [[bugs/login-lockout-rollback]] — FIXED 2026-06-04, @Transactional rollback vô hiệu account lockout (test caught it)
 
 ## Analysis
 - ⭐ See [Academic Refactor Deliverables](#-academic-refactor-deliverables-cho-bài-tập-lớn-đhbk) above
