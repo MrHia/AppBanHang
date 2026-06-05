@@ -114,6 +114,8 @@ export const requestApi = {
   // Multi-site: chọn nhiều site / mặt hàng
   getSitePicks: (id) => wrap('get', `/requests/${id}/site-picks`),
   saveSitePicks: (id, picks) => wrap('post', `/requests/${id}/site-picks`, picks),
+  // 1-step workflow: trả thẳng (site × method) đúng hẹn + tồn kho cho từng mặt hàng
+  getSiteOptions: (id) => wrap('get', `/requests/${id}/site-options`),
   // Step 2
   sendInquiries: (id) => wrap('post', `/requests/${id}/send-inquiries`),
   // Step 3

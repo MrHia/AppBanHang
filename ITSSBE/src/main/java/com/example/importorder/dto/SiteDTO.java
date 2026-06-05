@@ -12,6 +12,8 @@ public class SiteDTO {
     public String phone;
     public String address;
     public Boolean isActive;
+    public Integer shipDays;
+    public Integer airDays;
     public String generatedEmail;
     public String generatedPassword;
 }

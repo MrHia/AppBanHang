@@ -31,6 +31,10 @@ public interface IProcessRequestService {
     // Multi-site: lấy các lựa chọn đã lưu (một dòng / (mặt hàng × site))
     List<SitePickDTO> getSitePicks(Integer requestId);
 
+    // 1-step workflow: trả thẳng các (site × method) đáp ứng được desired_date cho từng mặt hàng.
+    // Đã filter: stock > 0, ngày hôm nay + delivery_days ≤ desired_date.
+    List<SiteOptionDTO> getSiteOptions(Integer requestId);
+
     // Step 2: Gửi yêu cầu kiểm tra tồn kho đến các Site
     void sendInquiries(Integer requestId);
 

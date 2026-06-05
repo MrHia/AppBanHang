@@ -8,7 +8,7 @@ import { useCRUDTable, useFormDialog, useAlert } from 'src/hooks';
 import { siteApi, siteMerchandiseApi } from 'src/api';
 import { useTranslation } from 'src/i18n/useTranslation';
 
-const INITIAL_FORM = { code: '', name: '', country: '', email: '', phone: '', address: '' };
+const INITIAL_FORM = { code: '', name: '', country: '', email: '', phone: '', address: '', shipDays: 30, airDays: 7 };
 
 const fetchSites = () => siteApi.getAll();
 
@@ -60,14 +60,26 @@ function SitesContent() {
       showError('Vui lòng nhập mã site (ví dụ: SITE-VN-001)');
       return;
     }
+    const sd = Number(form.formData.shipDays);
+    const ad = Number(form.formData.airDays);
+    if (!Number.isFinite(sd) || sd < 1 || !Number.isFinite(ad) || ad < 1) {
+      showError('Số ngày giao bằng tàu / máy bay phải là số ≥ 1');
+      return;
+    }
     try {
-      const res = await siteApi.create(form.formData);
-      const data = res?.data || res;
-      if (data?.generatedEmail && data?.generatedPassword) {
-        setCredInfo({ siteName: data.name || form.formData.name, email: data.generatedEmail, password: data.generatedPassword });
-        setCredOpen(true);
+      const payload = { ...form.formData, shipDays: sd, airDays: ad };
+      if (form.isEditing) {
+        await siteApi.update(form.editingId, payload);
+        showSuccess('Đã cập nhật site');
       } else {
-        showSuccess(t('admin.sites.siteCreated'));
+        const res = await siteApi.create(payload);
+        const data = res?.data || res;
+        if (data?.generatedEmail && data?.generatedPassword) {
+          setCredInfo({ siteName: data.name || payload.name, email: data.generatedEmail, password: data.generatedPassword });
+          setCredOpen(true);
+        } else {
+          showSuccess(t('admin.sites.siteCreated'));
+        }
       }
       form.closeDialog();
       reload();
@@ -83,6 +95,8 @@ function SitesContent() {
     { key: 'email', label: t('common.email') },
     { key: 'phone', label: t('common.phone') },
     { key: 'address', label: t('admin.sites.address'), multiline: true },
+    { key: 'shipDays', label: 'Số ngày giao bằng tàu', type: 'number', required: true },
+    { key: 'airDays', label: 'Số ngày giao bằng máy bay', type: 'number', required: true },
   ];
 
   const columns = [
@@ -91,12 +105,26 @@ function SitesContent() {
     { key: 'country', label: t('admin.sites.country') },
     { key: 'email', label: t('common.email') },
     {
+      key: 'shipping', label: 'Vận chuyển (tàu / máy bay)',
+      render: r => (
+        <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap' }}>
+          <Chip size="small" label={`🚢 ${r.shipDays ?? '—'} ngày`} variant="outlined" color="info" />
+          <Chip size="small" label={`✈️ ${r.airDays ?? '—'} ngày`} variant="outlined" color="warning" />
+        </Box>
+      ),
+    },
+    {
       key: 'status', label: t('status.label'),
       render: r => <Chip label={r.isActive ? t('status.active') : t('status.inactive')} size="small" color={r.isActive ? 'success' : 'default'} />,
     },
     {
       key: 'products', label: 'Sản phẩm',
-      render: r => <Button size="small" variant="outlined" onClick={() => openProducts(r)}>Xem sản phẩm</Button>,
+      render: r => (
+        <Box sx={{ display: 'flex', gap: 0.5 }}>
+          <Button size="small" variant="text" onClick={() => form.openDialog(r)}>Sửa</Button>
+          <Button size="small" variant="outlined" onClick={() => openProducts(r)}>Xem sản phẩm</Button>
+        </Box>
+      ),
     },
   ];
 
@@ -110,8 +138,8 @@ function SitesContent() {
 
       <FormDialog
         open={form.open}
-        title={t('admin.sites.addNewSite')}
-        fields={fields}
+        title={form.isEditing ? 'Sửa site' : t('admin.sites.addNewSite')}
+        fields={form.isEditing ? fields.filter(f => f.key !== 'code') : fields}
         formData={form.formData}
         setField={form.setField}
         onClose={form.closeDialog}

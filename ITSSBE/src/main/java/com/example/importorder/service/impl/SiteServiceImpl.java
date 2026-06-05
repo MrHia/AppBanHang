@@ -48,6 +48,8 @@ public class SiteServiceImpl implements ISiteService {
         s.setPhone(dto.phone);
         s.setAddress(dto.address);
         s.setIsActive(true);
+        s.setShipDays(dto.shipDays != null ? dto.shipDays : 30);
+        s.setAirDays(dto.airDays != null ? dto.airDays : 7);
         siteRepo.save(s);
         auditService.log(null, "CREATE_SITE", "site", s.getId(), "Created site: " + dto.code);
 
@@ -92,6 +94,14 @@ public class SiteServiceImpl implements ISiteService {
         if (dto.email != null) s.setEmail(dto.email);
         if (dto.phone != null) s.setPhone(dto.phone);
         if (dto.address != null) s.setAddress(dto.address);
+        if (dto.shipDays != null) {
+            if (dto.shipDays < 1) throw new RuntimeException("shipDays must be >= 1");
+            s.setShipDays(dto.shipDays);
+        }
+        if (dto.airDays != null) {
+            if (dto.airDays < 1) throw new RuntimeException("airDays must be >= 1");
+            s.setAirDays(dto.airDays);
+        }
         siteRepo.save(s);
         return mapper.toDTO(s);
     }

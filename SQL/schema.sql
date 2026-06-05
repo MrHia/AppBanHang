@@ -26,9 +26,15 @@ CREATE TABLE IF NOT EXISTS site (
     phone VARCHAR(20),
     address TEXT,
     is_active BOOLEAN DEFAULT TRUE,
+    ship_days INT NOT NULL DEFAULT 30,
+    air_days INT NOT NULL DEFAULT 7,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migration for existing DB
+ALTER TABLE site ADD COLUMN IF NOT EXISTS ship_days INT NOT NULL DEFAULT 30;
+ALTER TABLE site ADD COLUMN IF NOT EXISTS air_days INT NOT NULL DEFAULT 7;
 
 -- =========================================
 -- Table: account (depends on role and site)
@@ -307,11 +313,11 @@ INSERT INTO account (email, password, first_name, last_name, phone, role_id, mus
 INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
 ('overseas@system.com', 'overseas123', 'Nhan', 'Vien MuaHang', '0904567890', 2, FALSE);
 
--- Sites
-INSERT INTO site (code, name, country, email, phone, address) VALUES
-('SITE-US-001', 'USA Import Hub', 'United States', 'contact@usaimporthub.com', '+1-555-0101', '123 Trade Ave, Los Angeles, CA'),
-('SITE-JP-001', 'Japan Trade Co', 'Japan', 'info@japantradeco.jp', '+81-3-5555-0101', '456 Shibuya, Tokyo'),
-('SITE-DE-001', 'Germany Logistics GmbH', 'Germany', 'kontakt@delogistics.de', '+49-30-5550101', '789 Berlin Strasse, Berlin');
+-- Sites (ship_days và air_days theo địa lý: JP gần nhất, DE xa nhất bằng tàu)
+INSERT INTO site (code, name, country, email, phone, address, ship_days, air_days) VALUES
+('SITE-US-001', 'USA Import Hub', 'United States', 'contact@usaimporthub.com', '+1-555-0101', '123 Trade Ave, Los Angeles, CA', 25, 5),
+('SITE-JP-001', 'Japan Trade Co', 'Japan', 'info@japantradeco.jp', '+81-3-5555-0101', '456 Shibuya, Tokyo', 7, 2),
+('SITE-DE-001', 'Germany Logistics GmbH', 'Germany', 'kontakt@delogistics.de', '+49-30-5550101', '789 Berlin Strasse, Berlin', 40, 6);
 
 -- Site accounts (password: site123 for all)
 INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES

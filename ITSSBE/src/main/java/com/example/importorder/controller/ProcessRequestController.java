@@ -38,6 +38,12 @@ public class ProcessRequestController {
         return ResponseEntity.ok(ApiResponse.ok("Assignments saved", null));
     }
 
+    // 1-step workflow: trả thẳng (site × method) đúng hẹn + tồn kho cho từng mặt hàng
+    @GetMapping("/{id}/site-options")
+    public ResponseEntity<ApiResponse<Object>> getSiteOptions(@PathVariable Integer id) {
+        return ResponseEntity.ok(ApiResponse.ok(service.getSiteOptions(id)));
+    }
+
     // Multi-site: chọn nhiều site / mặt hàng để hỏi tồn kho
     @GetMapping("/{id}/site-picks")
     public ResponseEntity<ApiResponse<Object>> getSitePicks(@PathVariable Integer id) {

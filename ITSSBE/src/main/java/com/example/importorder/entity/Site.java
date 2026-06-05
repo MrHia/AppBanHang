@@ -31,6 +31,12 @@ public class Site {
     @Column(name = "is_active")
     private Boolean isActive = true;
 
+    @Column(name = "ship_days", nullable = false)
+    private Integer shipDays = 30;
+
+    @Column(name = "air_days", nullable = false)
+    private Integer airDays = 7;
+
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 

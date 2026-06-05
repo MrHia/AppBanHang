@@ -13,6 +13,7 @@ public class PurchaseOrderDTO {
     public String siteName;
     public String status;
     public String deliveryMethod;
+    public String deliveryMeans;   // "ship delivery" hoặc "air delivery" (UC mới)
     public String expectedDelivery;
     public String rejectionReason;
     public String createdAt;

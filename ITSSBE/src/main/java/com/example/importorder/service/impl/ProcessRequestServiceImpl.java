@@ -301,6 +301,54 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     }
 
     // ============================================================
+    // 1-step workflow: trả thẳng (site × method) đáp ứng được desired_date
+    // Không cần hỏi tồn vì SiteMerchandise.stockQuantity đã sẵn.
+    // ============================================================
+    @Override
+    public List<SiteOptionDTO> getSiteOptions(Integer requestId) {
+        ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
+        LocalDate desired = pr.getDesiredDate();
+        LocalDate today = LocalDate.now();
+
+        List<SiteOptionDTO> result = new ArrayList<>();
+        for (RequestItem item : pr.getRequestItems()) {
+            SiteOptionDTO opt = new SiteOptionDTO();
+            opt.merchandiseId = item.getMerchandise().getId();
+            opt.merchandiseCode = item.getMerchandise().getCode();
+            opt.merchandiseName = item.getMerchandise().getName();
+            opt.requestedQty = item.getQuantity();
+            opt.unit = item.getUnit();
+            opt.rows = new ArrayList<>();
+
+            for (SiteMerchandise sm : smRepo.findActiveStockByMerchandise(opt.merchandiseId)) {
+                Site site = sm.getSite();
+                addRowIfOnTime(opt.rows, sm, site, "SHIP", site.getShipDays(), today, desired);
+                addRowIfOnTime(opt.rows, sm, site, "AIR", site.getAirDays(), today, desired);
+            }
+            result.add(opt);
+        }
+        return result;
+    }
+
+    private void addRowIfOnTime(List<SiteOptionDTO.SiteRowDTO> rows, SiteMerchandise sm, Site site,
+                                String method, Integer days, LocalDate today, LocalDate desired) {
+        if (days == null) return;
+        LocalDate expected = today.plusDays(days);
+        if (desired != null && expected.isAfter(desired)) return; // không đúng hẹn → ẩn
+        SiteOptionDTO.SiteRowDTO row = new SiteOptionDTO.SiteRowDTO();
+        row.siteId = site.getId();
+        row.siteCode = site.getCode();
+        row.siteName = site.getName();
+        row.siteCountry = site.getCountry();
+        row.siteMerchandiseId = sm.getId();
+        row.stockQuantity = sm.getStockQuantity();
+        row.deliveryMethod = method;
+        row.deliveryDays = days;
+        row.expectedDelivery = expected.toString();
+        rows.add(row);
+    }
+
+    // ============================================================
     // Step 2: Gửi inquiry — mỗi site nhận danh sách mặt hàng được gán cho nó
     // ============================================================
     @Override
@@ -414,13 +462,48 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             throw new IllegalArgumentException("Phải có ít nhất 1 đơn đặt hàng (PO)");
         }
 
-        ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
-        List<PurchaseOrderDTO> createdPOs = new ArrayList<>();
+        ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
 
-        Map<Integer, Map<Integer, StockInfoDTO>> matrix = inquiryService.getInventoryMatrix(requestId);
+        // Aggregate yêu cầu của sales theo merchandise (để check tổng số lượng nhập đủ chưa)
+        Map<Integer, Integer> requestedByMerch = new HashMap<>();
+        for (RequestItem ri : pr.getRequestItems()) {
+            requestedByMerch.merge(ri.getMerchandise().getId(), ri.getQuantity(), Integer::sum);
+        }
+
+        // Tổng số lượng nhập (do user phân bổ qua các PO) theo merchandise
+        Map<Integer, Integer> orderedByMerch = new HashMap<>();
+        for (CreatePORequest order : request.orders) {
+            if (order.items == null) continue;
+            for (POItemRequest it : order.items) {
+                if (it.quantity == null || it.quantity <= 0) {
+                    throw new IllegalArgumentException("Số lượng đặt phải > 0");
+                }
+                orderedByMerch.merge(it.merchandiseId, it.quantity, Integer::sum);
+            }
+        }
+
+        // Đúng yêu cầu: tổng số nhập >= số sales cần (cho phép vượt? không — = đúng để khớp UC).
+        // Mở rộng: cho phép vượt nhẹ nếu cần, ở đây giữ đúng số sales yêu cầu.
+        for (Map.Entry<Integer, Integer> e : requestedByMerch.entrySet()) {
+            int ordered = orderedByMerch.getOrDefault(e.getKey(), 0);
+            if (ordered < e.getValue()) {
+                Merchandise m = mRepo.findById(e.getKey()).orElseThrow();
+                throw new IllegalArgumentException("Mặt hàng " + m.getCode()
+                    + " cần " + e.getValue() + " nhưng mới đặt " + ordered);
+            }
+        }
+
+        List<PurchaseOrderDTO> createdPOs = new ArrayList<>();
 
         for (CreatePORequest order : request.orders) {
             Site site = siteRepo.findById(order.siteId).orElseThrow();
+
+            // Chỉ chấp nhận SHIP hoặc AIR (UC mới)
+            String methodName = order.deliveryMethod != null ? order.deliveryMethod : "SHIP";
+            if (!methodName.equals("SHIP") && !methodName.equals("AIR")) {
+                throw new IllegalArgumentException("Phương thức vận chuyển phải là SHIP hoặc AIR");
+            }
+            PurchaseOrder.DeliveryMethod method = PurchaseOrder.DeliveryMethod.valueOf(methodName);
 
             String code = "PO-" + LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"))
                     + "-" + String.format("%03d", new Random().nextInt(999));
@@ -429,8 +512,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             po.setCode(code);
             po.setProcessRequest(pr);
             po.setSite(site);
-            po.setDeliveryMethod(PurchaseOrder.DeliveryMethod.valueOf(
-                    order.deliveryMethod != null ? order.deliveryMethod : "SHIP"));
+            po.setDeliveryMethod(method);
             if (order.expectedDelivery != null) {
                 po.setExpectedDelivery(LocalDate.parse(order.expectedDelivery));
             }
@@ -439,18 +521,29 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
             if (order.items != null) {
                 for (POItemRequest item : order.items) {
-                    if (matrix.containsKey(site.getId()) && matrix.get(site.getId()).containsKey(item.merchandiseId)) {
-                        StockInfoDTO stockInfo = matrix.get(site.getId()).get(item.merchandiseId);
-                        if ("inquiry".equals(stockInfo.source) && item.quantity > stockInfo.quantity) {
-                            throw new RuntimeException(
-                                "Quantity " + item.quantity + " exceeds available stock " + stockInfo.quantity
-                                + " for merchandise at Site " + site.getCode()
-                            );
-                        }
+                    if (item.quantity == null || item.quantity <= 0) {
+                        throw new IllegalArgumentException("Số lượng đặt phải > 0");
                     }
+                    SiteMerchandise sm = smRepo.findBySiteIdAndMerchandiseId(site.getId(), item.merchandiseId)
+                        .orElseThrow(() -> new RuntimeException("Site " + site.getCode()
+                            + " không kinh doanh mặt hàng " + item.merchandiseId));
+                    if (!Boolean.TRUE.equals(sm.getIsActive())) {
+                        throw new RuntimeException("Site " + site.getCode()
+                            + " đã ngừng kinh doanh mặt hàng " + sm.getMerchandise().getCode());
+                    }
+                    int stock = sm.getStockQuantity() != null ? sm.getStockQuantity() : 0;
+                    if (item.quantity > stock) {
+                        throw new RuntimeException("Số lượng " + item.quantity
+                            + " vượt tồn kho " + stock + " của site " + site.getCode()
+                            + " cho mặt hàng " + sm.getMerchandise().getCode());
+                    }
+                    // Trừ tồn kho ngay khi gửi PO (Site sẽ nhận hàng đi)
+                    sm.setStockQuantity(stock - item.quantity);
+                    smRepo.save(sm);
+
                     PODetail pod = new PODetail();
                     pod.setPurchaseOrder(po);
-                    pod.setMerchandise(mRepo.findById(item.merchandiseId).orElseThrow());
+                    pod.setMerchandise(sm.getMerchandise());
                     pod.setQuantity(item.quantity);
                     pod.setUnit(item.unit);
                     podRepo.save(pod);
@@ -467,17 +560,16 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             dto.siteName = site.getName();
             dto.status = po.getStatus().name();
             dto.deliveryMethod = po.getDeliveryMethod().name();
+            dto.deliveryMeans = po.getDeliveryMethod() == PurchaseOrder.DeliveryMethod.AIR
+                ? "air delivery" : "ship delivery";
             dto.expectedDelivery = po.getExpectedDelivery() != null ? po.getExpectedDelivery().toString() : null;
             dto.createdAt = po.getCreatedAt() != null ? po.getCreatedAt().toString() : null;
             createdPOs.add(dto);
         }
 
-        // Nếu tất cả assignments đã responded, đánh dấu request DONE
-        List<RequestSite> picked = rsRepo.findByRequestAndStatus(requestId, RequestSite.SelectionStatus.PICKED);
-        if (picked.isEmpty()) {
-            pr.setStatus(ProcessRequest.RequestStatus.DONE);
-            prRepo.save(pr);
-        }
+        // Đã đặt đủ → đánh dấu request DONE
+        pr.setStatus(ProcessRequest.RequestStatus.DONE);
+        prRepo.save(pr);
 
         return createdPOs;
     }

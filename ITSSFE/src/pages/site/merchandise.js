@@ -17,17 +17,21 @@ import CancelPresentationIcon from '@mui/icons-material/CancelPresentation';
 import InventoryIcon from '@mui/icons-material/Inventory';
 import SearchIcon from '@mui/icons-material/Search';
 import RefreshIcon from '@mui/icons-material/Refresh';
+import EditIcon from '@mui/icons-material/Edit';
+import SaveIcon from '@mui/icons-material/Save';
+import CloseIcon from '@mui/icons-material/Close';
 
-// Site KHÔNG quản tồn kho — chỉ chọn các mặt hàng mình kinh doanh.
+// Site quản lý tồn kho của từng mặt hàng (Overseas đọc trực tiếp khi đặt hàng).
 function AddMerchandiseDialog({ open, onClose, onAdded, user, t }) {
   const [catalog, setCatalog] = React.useState([]);
   const [selectedId, setSelectedId] = React.useState('');
+  const [stockQuantity, setStockQuantity] = React.useState(0);
   const [loading, setLoading] = React.useState(false);
   const [search, setSearch] = React.useState('');
 
   React.useEffect(() => {
     if (!open) return;
-    setSelectedId(''); setSearch('');
+    setSelectedId(''); setSearch(''); setStockQuantity(0);
     Promise.all([merchandiseApi.getAll(), siteMerchandiseApi.getBySite(user.siteId)])
       .then(([cat, sm]) => {
         const smIds = new Set((Array.isArray(sm) ? sm : []).map(m => m.merchandiseId));
@@ -42,8 +46,9 @@ function AddMerchandiseDialog({ open, onClose, onAdded, user, t }) {
 
   const handleAdd = async () => {
     if (!selectedId) return;
+    const qty = Math.max(0, parseInt(stockQuantity, 10) || 0);
     setLoading(true);
-    try { await onAdded(parseInt(selectedId)); setSelectedId(''); setSearch(''); }
+    try { await onAdded(parseInt(selectedId), qty); setSelectedId(''); setSearch(''); setStockQuantity(0); }
     finally { setLoading(false); }
   };
 
@@ -60,7 +65,7 @@ function AddMerchandiseDialog({ open, onClose, onAdded, user, t }) {
             <Typography variant="body2" color="text.secondary">{catalog.length === 0 ? t('site.merchandiseMgmt.noMerchandise') : 'Không có mặt hàng phù hợp'}</Typography>
           </Box>
         ) : (
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 320, overflow: 'auto' }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, maxHeight: 280, overflow: 'auto' }}>
             {filtered.map(m => (
               <Box key={m.id} onClick={() => setSelectedId(String(m.id))}
                 sx={{ display: 'flex', alignItems: 'center', gap: 2, p: 1.5, borderRadius: 1,
@@ -77,6 +82,20 @@ function AddMerchandiseDialog({ open, onClose, onAdded, user, t }) {
                 {selectedId === String(m.id) && <CheckCircleIcon fontSize="small" color="primary" />}
               </Box>
             ))}
+          </Box>
+        )}
+        {selectedId && (
+          <Box sx={{ mt: 2 }}>
+            <TextField
+              fullWidth
+              size="small"
+              type="number"
+              label="Số lượng tồn kho ban đầu"
+              value={stockQuantity}
+              onChange={e => setStockQuantity(e.target.value)}
+              inputProps={{ min: 0 }}
+              helperText="Số lượng hiện có trong kho — Overseas sẽ thấy số này khi đặt hàng."
+            />
           </Box>
         )}
       </DialogContent>
@@ -97,6 +116,9 @@ function SiteMerchandiseContent() {
   const [loading, setLoading] = React.useState(true);
   const [addOpen, setAddOpen] = React.useState(false);
   const [tab, setTab] = React.useState(0);
+  const [editingId, setEditingId] = React.useState(null);
+  const [editingStock, setEditingStock] = React.useState(0);
+  const [savingStock, setSavingStock] = React.useState(false);
 
   const showAlert = (msg, type = 'success') => { setAlert(msg); setAlertType(type); };
 
@@ -110,21 +132,46 @@ function SiteMerchandiseContent() {
 
   React.useEffect(() => { if (user?.siteId) load(); }, [user]);
 
-  const handleAdd = async (merchId) => {
-    // không gửi stockQuantity — site không quản tồn kho
-    await siteMerchandiseApi.addMerchandise(user.siteId, { merchandiseId: merchId });
+  const handleAdd = async (merchId, stockQuantity) => {
+    await siteMerchandiseApi.addMerchandise(user.siteId, { merchandiseId: merchId, stockQuantity });
     load(); showAlert(t('site.merchandiseMgmt.addSuccess')); setAddOpen(false);
   };
 
   const handleToggleActive = async (item) => {
     if (item.isActive) { await siteMerchandiseApi.removeMerchandise(item.id); showAlert(t('site.merchandiseMgmt.removeSuccess')); }
-    else { await siteMerchandiseApi.addMerchandise(user.siteId, { merchandiseId: item.merchandiseId }); showAlert('Đã mở lại kinh doanh mặt hàng'); }
+    else { await siteMerchandiseApi.addMerchandise(user.siteId, { merchandiseId: item.merchandiseId, stockQuantity: item.stockQuantity || 0 }); showAlert('Đã mở lại kinh doanh mặt hàng'); }
     load();
+  };
+
+  const startEditStock = (item) => {
+    setEditingId(item.id);
+    setEditingStock(item.stockQuantity ?? 0);
+  };
+
+  const cancelEditStock = () => {
+    setEditingId(null);
+    setEditingStock(0);
+  };
+
+  const saveStock = async (item) => {
+    const v = Math.max(0, parseInt(editingStock, 10) || 0);
+    setSavingStock(true);
+    try {
+      await siteMerchandiseApi.updateStock(item.id, v);
+      showAlert('Đã cập nhật tồn kho');
+      setEditingId(null);
+      load();
+    } catch (err) {
+      showAlert(typeof err === 'string' ? err : (err?.message || 'Cập nhật tồn kho thất bại'), 'error');
+    } finally {
+      setSavingStock(false);
+    }
   };
 
   const activeItems = items.filter(i => i.isActive);
   const inactiveItems = items.filter(i => !i.isActive);
   const displayedItems = tab === 0 ? activeItems : inactiveItems;
+  const totalStock = activeItems.reduce((s, i) => s + (i.stockQuantity || 0), 0);
 
   return (
     <Container maxWidth="xl" sx={{ pb: 4 }}>
@@ -133,15 +180,22 @@ function SiteMerchandiseContent() {
           <InventoryIcon color="primary" fontSize="large" />
           <Typography variant="h5" fontWeight={800}>{t('site.merchandiseMgmt.title')}</Typography>
         </Box>
-        <Typography variant="body2" color="text.secondary">Danh mục các mặt hàng site đang kinh doanh (site không quản lý tồn kho — chỉ trạng thái).</Typography>
+        <Typography variant="body2" color="text.secondary">
+          Quản lý mặt hàng và tồn kho của site. Bộ phận Overseas sẽ thấy số tồn kho này khi đặt hàng.
+        </Typography>
       </Box>
 
-      {/* Stats: chỉ đếm theo trạng thái, không có tồn kho */}
       <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
         <Card sx={{ flex: 1, minWidth: 180, bgcolor: '#ECFDF5', border: '1px solid #A7F3D0' }} elevation={0}>
           <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
             <Typography variant="caption" color="success.dark" fontWeight={600}>Đang kinh doanh</Typography>
             <Typography variant="h4" fontWeight={800} color="success.main">{activeItems.length}</Typography>
+          </CardContent>
+        </Card>
+        <Card sx={{ flex: 1, minWidth: 180, bgcolor: '#EFF6FF', border: '1px solid #BFDBFE' }} elevation={0}>
+          <CardContent sx={{ py: 2, '&:last-child': { pb: 2 } }}>
+            <Typography variant="caption" color="primary.dark" fontWeight={600}>Tổng tồn kho</Typography>
+            <Typography variant="h4" fontWeight={800} color="primary.main">{totalStock}</Typography>
           </CardContent>
         </Card>
         <Card sx={{ flex: 1, minWidth: 180, bgcolor: '#F3F4F6', border: '1px solid #E5E7EB' }} elevation={0}>
@@ -174,6 +228,7 @@ function SiteMerchandiseContent() {
                 <TableCell sx={{ fontWeight: 600 }}>{t('common.code')}</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>{t('common.name')}</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>{t('admin.merchandise.unit')}</TableCell>
+                <TableCell sx={{ fontWeight: 600 }} align="right">Tồn kho</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>{t('status.label')}</TableCell>
                 <TableCell sx={{ fontWeight: 600 }}>{t('common.actions')}</TableCell>
               </TableRow>
@@ -181,7 +236,7 @@ function SiteMerchandiseContent() {
             <TableBody>
               {displayedItems.length === 0 && (
                 <TableRow>
-                  <TableCell colSpan={5} align="center" sx={{ py: 6 }}>
+                  <TableCell colSpan={6} align="center" sx={{ py: 6 }}>
                     <Box sx={{ opacity: 0.5 }}>
                       <InventoryIcon sx={{ fontSize: 48, mb: 1 }} />
                       <Typography variant="body2" color="text.secondary">{tab === 0 ? t('site.merchandiseMgmt.noMerchandise') : 'Không có mặt hàng ngừng kinh doanh'}</Typography>
@@ -189,25 +244,67 @@ function SiteMerchandiseContent() {
                   </TableCell>
                 </TableRow>
               )}
-              {displayedItems.map(item => (
+              {displayedItems.map(item => {
+                const isEditing = editingId === item.id;
+                return (
                 <TableRow key={item.id} hover sx={{ opacity: item.isActive ? 1 : 0.6, bgcolor: item.isActive ? 'transparent' : '#FAFAFA' }}>
                   <TableCell sx={{ fontFamily: 'monospace', fontWeight: 700 }}>{item.merchandiseCode}</TableCell>
                   <TableCell><Typography variant="body2" fontWeight={500}>{item.merchandiseName}</Typography></TableCell>
                   <TableCell><Chip label={item.unit || 'piece'} size="small" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} /></TableCell>
+                  <TableCell align="right">
+                    {isEditing ? (
+                      <TextField
+                        size="small"
+                        type="number"
+                        autoFocus
+                        value={editingStock}
+                        onChange={e => setEditingStock(e.target.value)}
+                        inputProps={{ min: 0, style: { textAlign: 'right', width: 80 } }}
+                        disabled={savingStock}
+                      />
+                    ) : (
+                      <Typography fontWeight={700} color={item.stockQuantity > 0 ? 'success.main' : 'text.secondary'}>
+                        {item.stockQuantity ?? 0}
+                      </Typography>
+                    )}
+                  </TableCell>
                   <TableCell>
                     <Chip size="small" icon={item.isActive ? <CheckCircleIcon /> : <CancelPresentationIcon />}
                       label={item.isActive ? 'Đang kinh doanh' : 'Ngừng kinh doanh'}
                       color={item.isActive ? 'success' : 'default'} variant="outlined" sx={{ fontWeight: 600 }} />
                   </TableCell>
                   <TableCell>
-                    <Tooltip title={item.isActive ? 'Ngừng kinh doanh mặt hàng' : 'Mở lại kinh doanh mặt hàng'}>
-                      <IconButton size="small" onClick={() => handleToggleActive(item)} color={item.isActive ? 'error' : 'success'}>
-                        {item.isActive ? <RemoveCircleOutlineIcon /> : <AddIcon />}
-                      </IconButton>
-                    </Tooltip>
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      {item.isActive && !isEditing && (
+                        <Tooltip title="Sửa số lượng tồn kho">
+                          <IconButton size="small" color="primary" onClick={() => startEditStock(item)}>
+                            <EditIcon fontSize="small" />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                      {isEditing && (
+                        <>
+                          <Tooltip title="Lưu">
+                            <IconButton size="small" color="success" onClick={() => saveStock(item)} disabled={savingStock}>
+                              <SaveIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Huỷ">
+                            <IconButton size="small" onClick={cancelEditStock} disabled={savingStock}>
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </>
+                      )}
+                      <Tooltip title={item.isActive ? 'Ngừng kinh doanh mặt hàng' : 'Mở lại kinh doanh mặt hàng'}>
+                        <IconButton size="small" onClick={() => handleToggleActive(item)} color={item.isActive ? 'error' : 'success'}>
+                          {item.isActive ? <RemoveCircleOutlineIcon /> : <AddIcon />}
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
                   </TableCell>
                 </TableRow>
-              ))}
+              );})}
             </TableBody>
           </Table>
         </TableContainer>

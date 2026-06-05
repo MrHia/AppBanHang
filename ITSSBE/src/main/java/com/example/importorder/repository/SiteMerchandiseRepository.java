@@ -22,4 +22,9 @@ public interface SiteMerchandiseRepository extends JpaRepository<SiteMerchandise
     List<Integer> findSiteIdsSellingMerchandise(@Param("merchandiseIds") List<Integer> merchandiseIds);
 
     List<SiteMerchandise> findBySiteIdAndIsActiveTrue(Integer siteId);
+
+    @Query("SELECT sm FROM SiteMerchandise sm WHERE sm.merchandise.id = :merchandiseId "
+         + "AND sm.isActive = true AND sm.stockQuantity > 0 "
+         + "AND sm.site.isActive = true")
+    List<SiteMerchandise> findActiveStockByMerchandise(@Param("merchandiseId") Integer merchandiseId);
 }
