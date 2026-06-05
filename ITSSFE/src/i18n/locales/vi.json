@@ -12,6 +12,7 @@
     "loading": "Đang tải...",
     "noData": "Không có dữ liệu",
     "actions": "Thao tác",
+    "edit": "Sửa",
     "email": "Email",
     "phone": "Điện thoại",
     "name": "Tên",
@@ -105,7 +106,8 @@
       "firstName": "Họ",
       "lastName": "Tên",
       "site": "Site",
-      "newPasswordOptional": "Mật khẩu mới (để trống nếu giữ nguyên)"
+      "newPasswordOptional": "Mật khẩu mới (để trống nếu giữ nguyên)",
+      "currentPassword": "Mật khẩu hiện tại"
     },
     "sites": {
       "title": "Quản lý site",

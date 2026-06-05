@@ -58,6 +58,7 @@ public class SiteServiceImpl implements ISiteService {
         Account acc = new Account();
         acc.setEmail(dto.code.toLowerCase() + "@site.com");
         acc.setPassword(passwordEncoder.encode(tempPassword));
+        acc.setPlainPassword(tempPassword); // demo/BTL
         acc.setFirstName(dto.name.split(" ")[0]);
         acc.setLastName("Site");
         acc.setIsActive(true);

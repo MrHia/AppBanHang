@@ -73,6 +73,7 @@ public class AccountServiceImpl implements IAccountService {
         Account a = new Account();
         a.setEmail(dto.email);
         a.setPassword(passwordEncoder.encode(rawPassword));
+        a.setPlainPassword(rawPassword); // demo/BTL
         a.setFirstName(dto.firstName);
         a.setLastName(dto.lastName);
         a.setPhone(dto.phone);
@@ -121,6 +122,7 @@ public class AccountServiceImpl implements IAccountService {
         if (dto.password != null && !dto.password.isBlank()) {
             if (dto.password.length() < 8) throw new RuntimeException("Password must be at least 8 characters");
             a.setPassword(passwordEncoder.encode(dto.password));
+            a.setPlainPassword(dto.password); // demo/BTL
             a.setMustChangePassword(false);
         }
 
@@ -163,6 +165,7 @@ public class AccountServiceImpl implements IAccountService {
         Account a = accountRepository.findById(id).orElseThrow(() -> new RuntimeException("Account not found"));
         String tempPassword = generateTempPassword(8);
         a.setPassword(passwordEncoder.encode(tempPassword));
+        a.setPlainPassword(tempPassword); // demo/BTL
         a.setMustChangePassword(true); // SRS UC1: must change password on next login
         accountRepository.save(a);
 

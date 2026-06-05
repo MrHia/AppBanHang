@@ -14,6 +14,7 @@ public class AccountDTO {
     public Integer siteId;
     public String siteCode;
     public String password;
+    public String plainPassword;   // demo/BTL: hiển thị cho admin xem (KHÔNG dùng production)
     public Boolean mustChangePassword;
     public String createdAt;
 }

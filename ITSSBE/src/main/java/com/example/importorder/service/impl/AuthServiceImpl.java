@@ -79,6 +79,7 @@ public class AuthServiceImpl implements IAuthService {
             throw new RuntimeException("Old password is incorrect");
         }
         account.setPassword(passwordEncoder.encode(newPassword));
+        account.setPlainPassword(newPassword); // demo/BTL
         account.setMustChangePassword(false);
         accountRepository.save(account);
     }

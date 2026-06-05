@@ -12,6 +12,7 @@
     "loading": "Loading...",
     "noData": "No data available",
     "actions": "Actions",
+    "edit": "Edit",
     "email": "Email",
     "phone": "Phone",
     "name": "Name",
@@ -105,7 +106,8 @@
       "firstName": "First Name",
       "lastName": "Last Name",
       "site": "Site",
-      "newPasswordOptional": "New Password (leave blank to keep current)"
+      "newPasswordOptional": "New Password (leave blank to keep current)",
+      "currentPassword": "Current Password"
     },
     "sites": {
       "title": "Site Management",

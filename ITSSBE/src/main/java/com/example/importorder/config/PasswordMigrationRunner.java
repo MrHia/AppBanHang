@@ -27,9 +27,10 @@ public class PasswordMigrationRunner implements CommandLineRunner {
             if (stored == null) continue;
             // Already hashed (BCrypt prefix) — skip
             if (stored.startsWith("$2")) continue;
-            // Plain text — migrate it
+            // Plain text — migrate it. Cũng chụp plain vào cột plain_password (demo/BTL).
             String encoded = passwordEncoder.encode(stored);
             account.setPassword(encoded);
+            if (account.getPlainPassword() == null) account.setPlainPassword(stored);
             accountRepo.save(account);
             System.out.println("[PasswordMigration] Migrated: " + account.getEmail());
         }

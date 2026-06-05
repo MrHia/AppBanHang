@@ -43,6 +43,9 @@ CREATE TABLE IF NOT EXISTS account (
     id INT AUTO_INCREMENT PRIMARY KEY,
     email VARCHAR(255) NOT NULL UNIQUE,
     password VARCHAR(255) NOT NULL,
+    -- plain_password: chỉ dùng cho demo/BTL để admin xem mật khẩu hiện tại.
+    -- KHÔNG dùng pattern này trong production.
+    plain_password VARCHAR(100),
     first_name VARCHAR(100) NOT NULL,
     last_name VARCHAR(100) NOT NULL,
     phone VARCHAR(20),
@@ -56,6 +59,9 @@ CREATE TABLE IF NOT EXISTS account (
     FOREIGN KEY (role_id) REFERENCES role(id),
     FOREIGN KEY (site_id) REFERENCES site(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Migration for existing DB
+ALTER TABLE account ADD COLUMN IF NOT EXISTS plain_password VARCHAR(100);
 
 -- =========================================
 -- Table: notification (UC16: auto-notify WAREHOUSE when Site confirms PO)
@@ -298,20 +304,20 @@ ALTER TABLE account ADD COLUMN IF NOT EXISTS must_change_password BOOLEAN DEFAUL
 INSERT INTO role (name) VALUES ('ADMIN'), ('OVERSEAS'), ('SITE'), ('WAREHOUSE'), ('SALES');
 
 -- Admin account (password: admin123)
-INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
-('admin@system.com', 'admin123', 'Quan', 'Tri', '0901234567', 1, FALSE);
+INSERT INTO account (email, password, plain_password, first_name, last_name, phone, role_id, must_change_password) VALUES
+('admin@system.com', 'admin123', 'admin123', 'Quan', 'Tri', '0901234567', 1, FALSE);
 
 -- Sales account (password: sales123)
-INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
-('sales@system.com', 'sales123', 'Nhan', 'Vien BH', '0902345678', 5, FALSE);
+INSERT INTO account (email, password, plain_password, first_name, last_name, phone, role_id, must_change_password) VALUES
+('sales@system.com', 'sales123', 'sales123', 'Nhan', 'Vien BH', '0902345678', 5, FALSE);
 
 -- Warehouse account (password: warehouse123)
-INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
-('warehouse@system.com', 'warehouse123', 'Truong', 'Phong', '0903456789', 4, FALSE);
+INSERT INTO account (email, password, plain_password, first_name, last_name, phone, role_id, must_change_password) VALUES
+('warehouse@system.com', 'warehouse123', 'warehouse123', 'Truong', 'Phong', '0903456789', 4, FALSE);
 
 -- Overseas account (password: overseas123)
-INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
-('overseas@system.com', 'overseas123', 'Nhan', 'Vien MuaHang', '0904567890', 2, FALSE);
+INSERT INTO account (email, password, plain_password, first_name, last_name, phone, role_id, must_change_password) VALUES
+('overseas@system.com', 'overseas123', 'overseas123', 'Nhan', 'Vien MuaHang', '0904567890', 2, FALSE);
 
 -- Sites (ship_days và air_days theo địa lý: JP gần nhất, DE xa nhất bằng tàu)
 INSERT INTO site (code, name, country, email, phone, address, ship_days, air_days) VALUES
@@ -320,10 +326,10 @@ INSERT INTO site (code, name, country, email, phone, address, ship_days, air_day
 ('SITE-DE-001', 'Germany Logistics GmbH', 'Germany', 'kontakt@delogistics.de', '+49-30-5550101', '789 Berlin Strasse, Berlin', 40, 6);
 
 -- Site accounts (password: site123 for all)
-INSERT INTO account (email, password, first_name, last_name, phone, role_id, must_change_password) VALUES
-('site_us@system.com', 'site123', 'John', 'Smith', '+1-555-0102', 3, FALSE),
-('site_jp@system.com', 'site123', 'Taro', 'Yamamoto', '+81-3-5555-0102', 3, FALSE),
-('site_de@system.com', 'site123', 'Hans', 'Mueller', '+49-30-5550102', 3, FALSE);
+INSERT INTO account (email, password, plain_password, first_name, last_name, phone, role_id, must_change_password) VALUES
+('site_us@system.com', 'site123', 'site123', 'John', 'Smith', '+1-555-0102', 3, FALSE),
+('site_jp@system.com', 'site123', 'site123', 'Taro', 'Yamamoto', '+81-3-5555-0102', 3, FALSE),
+('site_de@system.com', 'site123', 'site123', 'Hans', 'Mueller', '+49-30-5550102', 3, FALSE);
 
 -- Assign sites to site accounts
 UPDATE account SET site_id = (SELECT id FROM site WHERE code = 'SITE-US-001') WHERE email = 'site_us@system.com';

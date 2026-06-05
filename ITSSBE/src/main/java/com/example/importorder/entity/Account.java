@@ -17,6 +17,10 @@ public class Account {
     @Column(nullable = false)
     private String password;
 
+    // CẢNH BÁO: lưu plain text song song hash — CHỈ cho demo/BTL, KHÔNG dùng production.
+    @Column(name = "plain_password", length = 100)
+    private String plainPassword;
+
     @Column(name = "first_name", nullable = false, length = 100)
     private String firstName;
 

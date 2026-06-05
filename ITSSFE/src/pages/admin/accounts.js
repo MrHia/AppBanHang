@@ -1,9 +1,6 @@
 import * as React from 'react';
-import { Container, Typography, Button, Box, Chip, IconButton, Stack } from '@mui/material';
+import { Container, Typography, Button, Box, Chip, IconButton } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
-import LockIcon from '@mui/icons-material/Lock';
-import LockOpenIcon from '@mui/icons-material/LockOpen';
-import KeyIcon from '@mui/icons-material/Key';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { DataTable, FormDialog, AlertSnackbar } from 'src/components';
@@ -87,17 +84,6 @@ function AccountsContent() {
     }
   };
 
-  const handleAction = async (id, action) => {
-    try {
-      if (action === 'lock') await accountApi.lock(id);
-      else if (action === 'unlock') await accountApi.unlock(id);
-      else if (action === 'reset') await accountApi.resetPassword(id);
-      reload();
-    } catch (err) {
-      showError(typeof err === 'string' ? err : (err?.message || t('common.error')));
-    }
-  };
-
   const columns = [
     { key: 'email', label: t('common.email') },
     { key: 'name', label: t('admin.accounts.fullName'), render: r => `${r.firstName || ''} ${r.lastName || ''}`.trim() },
@@ -106,18 +92,19 @@ function AccountsContent() {
       render: r => <Chip label={r.roleName} size="small" color={r.roleName === 'ADMIN' ? 'error' : r.roleName === 'SITE' ? 'warning' : 'default'} />,
     },
     {
+      key: 'plainPassword', label: t('admin.accounts.currentPassword'),
+      render: r => r.plainPassword
+        ? <Box component="span" sx={{ fontFamily: 'monospace', bgcolor: '#F1F5F9', px: 1, py: 0.25, borderRadius: 0.5 }}>{r.plainPassword}</Box>
+        : <Typography variant="caption" color="text.disabled">—</Typography>,
+    },
+    {
       key: 'status', label: t('status.label'),
       render: r => <Chip label={r.isActive ? t('status.active') : t('status.locked')} size="small" color={r.isActive ? 'success' : 'error'} />,
     },
     {
       key: 'actions', label: t('common.actions'),
       render: r => (
-        <Stack direction="row" spacing={0.5}>
-          <IconButton size="small" onClick={() => form.openDialog(r)} title={t('common.save')}><EditIcon fontSize="small" /></IconButton>
-          <IconButton size="small" onClick={() => handleAction(r.id, 'lock')} title={t('admin.accounts.lock')}><LockIcon fontSize="small" /></IconButton>
-          <IconButton size="small" onClick={() => handleAction(r.id, 'unlock')} title={t('admin.accounts.unlock')}><LockOpenIcon fontSize="small" /></IconButton>
-          <IconButton size="small" onClick={() => handleAction(r.id, 'reset')} title={t('admin.accounts.resetPassword')}><KeyIcon fontSize="small" /></IconButton>
-        </Stack>
+        <IconButton size="small" onClick={() => form.openDialog(r)} title={t('common.edit')}><EditIcon fontSize="small" /></IconButton>
       ),
     },
   ];
