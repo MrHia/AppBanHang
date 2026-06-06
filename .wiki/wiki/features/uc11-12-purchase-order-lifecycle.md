@@ -1,79 +1,100 @@
 ---
-title: UC11/UC12 — Purchase Order Lifecycle (DRAFT/SENT/CONFIRMED/REJECTED)
+title: UC11/UC12 — Purchase Order Lifecycle (DRAFT/SENT/CONFIRMED/REJECTED/DONE)
 category: features
-tags: [purchase-order, draft, lifecycle, state-machine]
-sources: [CHANGELOG.md, DOCS/USER_GUIDE.md]
+tags: [purchase-order, lifecycle, state-machine, cancellation, cascade]
+sources: [CHANGELOG.md, DOCS/USER_GUIDE.md, ITSSBE/src/main/java/com/example/importorder/domain/po/state/]
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-06
 ---
 
 # UC11/UC12 — Purchase Order Lifecycle
 
-> PO bắt đầu DRAFT (UC11) → có thể edit khi DRAFT (UC12) → SENT → CONFIRMED hoặc REJECTED (về lại DRAFT giữ reason).
+> PO starts DRAFT, can be edited while DRAFT, transitions DRAFT → SENT → CONFIRMED → DONE.
+> **REJECTED is a terminal cancellation state** (new 2026-06-06). Cancelling any PO cascades the parent ProcessRequest and every sibling PO to CANCELLED/REJECTED and restores deducted stock.
 
-## State machine
+## State machine (after 2026-06-06 refactor)
 
 ```
-                  ┌─────────────► CONFIRMED ─► Warehouse receive (UC15)
-                  │ (Site OK)
-   CREATE         │
-     │            │
-     ▼            ▼
-   DRAFT ──Send──► SENT
-     ▲            │
-     │            │ (Site reject + reason)
-     │            ▼
-     └────────  REJECTED ──auto-back──► DRAFT (rejectionReason preserved)
-       Overseas edit                    [BUG FIXED v1.1.0]
-       (UC12)
+                                 ┌──► DONE          (terminal)
+                                 │
+   create()    send()    confirm()    markDone()
+    │           │           │           │
+    ▼           ▼           ▼           ▼
+   DRAFT ───► SENT ───► CONFIRMED ───► DONE
+    │           │           │
+    │           │           │ reject(reason)
+    │           │           ▼
+    │           │       REJECTED       (terminal — cancellation)
+    │           │           ▲
+    │           └───────────┤ reject(reason)
+    │                       │
+    └───────────────────────┘ reject(reason)
 ```
 
-## Key behaviors
+> [!info] What changed on 2026-06-06
+> - REJECTED used to loop back to DRAFT (legacy UC12 "Overseas revises and resends"). Now REJECTED is **terminal** — see [[decisions/po-cancellation-cascade]].
+> - `reject(reason)` is now legal from DRAFT, SENT, and CONFIRMED (all interpreted as cancellation). DONE remains terminal.
+> - Cancelling a PO cascades: parent ProcessRequest → CANCELLED, every sibling PO → REJECTED, stock restored for any sibling that had consumed it (SENT or CONFIRMED).
 
-| Behavior | Detail |
-|----------|--------|
-| Create → DRAFT | `create()` set `status = DRAFT` (trước v1.1.0: SENT trực tiếp) |
-| Send DRAFT → SENT | `sendPO()` endpoint riêng |
-| Edit DRAFT | `PUT /api/po/{id}/items` — **chỉ** khi status = DRAFT |
-| Reject → DRAFT | Status về DRAFT, **giữ `rejectionReason`** để Overseas edit theo feedback |
-| Qty cap | PO item qty ≤ qty từ inquiry response (UC11 validation) |
+## Cascade rule
 
-See [[claims#c-20260603-07]].
+Triggered by `POST /api/po/{id}/reject?reason=...`. All three roles share this endpoint:
+- **Site** — reject button on `site/purchase-orders.js` (only SENT POs reach the Site).
+- **Overseas** — new cancel button on `overseas/purchase-orders.js`.
+- **Admin** — new cancel button on `admin/purchase-orders.js`.
 
-## API surface (preliminary)
+`PurchaseOrderServiceImpl.rejectPO(id, reason)` then:
+1. Transitions the trigger PO to REJECTED.
+2. Restores stock for the trigger if previous status was SENT or CONFIRMED (DRAFT had no deduction).
+3. Publishes `PORejectedEvent`.
+4. Sets the parent `ProcessRequest.status = CANCELLED`.
+5. For each sibling PO of the request: skip if REJECTED/DONE, otherwise reject with reason `"Cascaded from PO {triggerCode}: {reason}"`, restore stock if applicable.
+6. Audit-logs `REQUEST_CANCELLED_CASCADE` + `PO_CANCELLED_CASCADE`.
+7. Notifies OVERSEAS via `INotificationService`.
 
-- `POST /api/po/draft` — multi-site batch create DRAFT
-- `PUT /api/po/{id}/items` — edit DRAFT items
-- `POST /api/po/{id}/send` — DRAFT → SENT
-- `POST /api/po/{id}/confirm` — Site action
-- `POST /api/po/{id}/reject` — Site action với reason
-- `GET /api/po?role=…` — list theo role
+The whole cascade runs inside one `@Transactional` boundary — partial failure rolls back the entire operation.
 
-## Data touched
+## API surface
 
-- `purchase_order` (id, code, request_id, site_id, status, shipping_method, expected_delivery, rejection_reason, created_at)
-- `po_detail` (po_id, merchandise_id, quantity, unit_price?)
+| Endpoint | Purpose |
+|----------|---------|
+| `POST /api/po/draft` | Multi-site batch create DRAFT |
+| `PUT /api/po/{id}/items` | Edit DRAFT items |
+| `POST /api/po/{id}/send` | DRAFT → SENT |
+| `POST /api/po/{id}/confirm` | Site action, SENT → CONFIRMED |
+| `POST /api/po/{id}/reject?reason=…` | **Cancel** — DRAFT/SENT/CONFIRMED → REJECTED, plus cascade. Replaces old "send back for revision" semantics. |
+| `POST /api/po/{id}/done` | CONFIRMED → DONE |
+| `GET /api/po` (and per-site/per-request) | List |
 
-## Refactor opportunities
+## Data touched on cancellation
 
-> [!tip] Explicit state machine
-> Currently state transitions phân tán trong service methods. Refactor có thể dùng **Spring State Machine** hoặc abstract state class — dễ test edge cases.
+- `purchase_order.status = 'REJECTED'`, `rejection_reason` set.
+- `purchase_order.status` of every sibling = 'REJECTED' (same reason chain).
+- `process_request.status = 'CANCELLED'`.
+- `site_merchandise.stock_quantity` += each PODetail.quantity for every PO that had previously consumed stock.
+- `audit_log`: `REQUEST_CANCELLED_CASCADE`, `PO_CANCELLED_CASCADE` per sibling.
+- `notification`: one OVERSEAS row per cascade.
 
-> [!warning] PO status enum chưa verify
-> Có thể có thêm CANCELED, COMPLETED, ARCHIVED. Cần map từ entity `PurchaseOrder` (Explore agent sẽ trả).
+## Tests covering the new behaviour
 
-> [!info] Multi-site batch creation
-> 1 click có thể tạo N PO cùng lúc → cần **transactional**: hoặc tạo tất cả, hoặc không tạo gì. Check existing impl trong PurchaseOrderServiceImpl.
+- `POStateTest.rejectedStateIsTerminal` — all 5 transitions throw on a REJECTED PO.
+- `POStateTest.draftStateAllowsRejectAsCancellation` — DRAFT → REJECTED legal.
+- `POStateTest.confirmedStateAllowsRejectAsCancellation` — CONFIRMED → REJECTED legal.
+- `POStateTest.doneStateIsTerminal` (unchanged) — DONE remains untouchable.
+
+> [!tip] What was UC12
+> The old UC12 (Overseas revises a Site-rejected PO back to DRAFT) is **removed**. Revising a cancelled PO now requires starting a brand new ProcessRequest. If revision-loop semantics are needed in the future, model it as a separate "revision" endpoint, not as a state-machine cycle.
 
 ## Related bug
 
-- [[bugs/rejectpo-loses-reason]] — đã fix v1.1.0
+- [[bugs/rejectpo-loses-reason]] — historical; the original revision-loop bug is moot now that REJECTED is terminal (reason is preserved either way).
 
 ## Related
 
-- [[features/uc6-overseas-process-request]] — PO sinh ra từ aggregate step
-- [[features/uc13-site-confirm-reject-po]] — Site actions
-- [[features/uc15-warehouse-receive]] — sau khi CONFIRMED
+- [[decisions/po-cancellation-cascade]] — design rationale (2026-06-06)
+- [[features/uc6-overseas-process-request]] — PO batch is created at end of the 2-step wizard
+- [[features/uc15-20-warehouse-discrepancy]] — runs after CONFIRMED → DONE
+- [[components/backend-events]] — `PORejectedEvent`
 
 ---
 
@@ -81,3 +102,4 @@ See [[claims#c-20260603-07]].
 - [[overview]] — references UC11/12
 - [[sources/changelog]] — features in v1.1.0
 - [[sources/user-guide]] — workflow documented
+- [[decisions/po-cancellation-cascade]] — supersedes the UC12 revision loop

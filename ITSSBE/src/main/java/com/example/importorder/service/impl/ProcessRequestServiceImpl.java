@@ -10,7 +10,6 @@ import com.example.importorder.validation.AssignmentValidationService;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
-import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 import java.util.stream.Collectors;
@@ -25,12 +24,9 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     private final SiteRepository siteRepo;
     private final SiteMerchandiseRepository smRepo;
     private final RequestSiteRepository rsRepo;
-    private final StockInquiryRepository siRepo;
-    private final StockInquiryItemRepository siiRepo;
     private final PurchaseOrderRepository poRepo;
     private final PODetailRepository podRepo;
     private final IAuditService auditService;
-    private final IStockInquiryService inquiryService;
     private final ProcessRequestMapper mapper;
     private final AssignmentValidationService validationService;
 
@@ -38,23 +34,17 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             ProcessRequestRepository prRepo, RequestItemRepository riRepo,
             MerchandiseRepository mRepo, AccountRepository accRepo,
             SiteRepository siteRepo, SiteMerchandiseRepository smRepo,
-            RequestSiteRepository rsRepo, StockInquiryRepository siRepo,
-            StockInquiryItemRepository siiRepo, PurchaseOrderRepository poRepo,
+            RequestSiteRepository rsRepo, PurchaseOrderRepository poRepo,
             PODetailRepository podRepo, IAuditService auditService,
-            IStockInquiryService inquiryService, ProcessRequestMapper mapper,
+            ProcessRequestMapper mapper,
             AssignmentValidationService validationService) {
         this.prRepo = prRepo; this.riRepo = riRepo; this.mRepo = mRepo;
         this.accRepo = accRepo; this.siteRepo = siteRepo; this.smRepo = smRepo;
-        this.rsRepo = rsRepo; this.siRepo = siRepo; this.siiRepo = siiRepo;
-        this.poRepo = poRepo; this.podRepo = podRepo; this.auditService = auditService;
-        this.inquiryService = inquiryService; this.mapper = mapper;
+        this.rsRepo = rsRepo; this.poRepo = poRepo; this.podRepo = podRepo;
+        this.auditService = auditService; this.mapper = mapper;
         this.validationService = validationService;
     }
 
-    /**
-     * Wrap mapper với fallback itemCount: nếu requestItems chưa được fetch (lazy),
-     * query riRepo để đếm.
-     */
     private ProcessRequestDTO toDTOWithItemCount(ProcessRequest pr) {
         ProcessRequestDTO d = mapper.toDTO(pr);
         if (d.itemCount == 0 && pr.getRequestItems() == null) {
@@ -137,7 +127,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
     // ============================================================
     // Step 1: Lấy assignments — mỗi mặt hàng đã được gán site
-    // KHÔNG trả stock — stock chỉ hiển thị khi Site phản hồi (UC10)
+    // Trả kèm stock từ SiteMerchandise.stockQuantity (không cần hỏi site).
     // ============================================================
     @Override
     public List<MerchandiseAssignmentDTO> getMerchandiseAssignments(Integer requestId) {
@@ -174,16 +164,12 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         return results;
     }
 
-    // ============================================================
-    // Step 1: Lưu assignments — mỗi mặt hàng gán đúng 1 site
-    // ============================================================
     @Override
     @Transactional
     public void saveMerchandiseAssignments(Integer requestId, List<MerchandisePickRequest> assignments) {
         ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
         Set<Integer> requestMerchIds = collectRequestMerchandiseIds(requestId);
 
-        // Chain of Responsibility: NonEmpty -> NoDuplicates -> Completeness -> Membership
         AssignmentContext ctx = new AssignmentContext(assignments, requestMerchIds);
         validationService.runAll(ctx);
 
@@ -227,9 +213,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         return getMerchandiseAssignments(requestId);
     }
 
-    // ============================================================
-    // Multi-site: lưu lựa chọn (mặt hàng × site) — 1 mặt hàng có thể hỏi nhiều site
-    // ============================================================
     @Override
     @Transactional
     public void saveSitePicks(Integer requestId, List<SitePickRequest> picks) {
@@ -238,12 +221,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         }
         ProcessRequest pr = prRepo.findById(requestId).orElseThrow();
 
-        // Không cho sửa lựa chọn sau khi đã gửi yêu cầu (đã tạo inquiry)
-        if (!siRepo.findByProcessRequestId(requestId).isEmpty()) {
-            throw new IllegalArgumentException("Đã gửi yêu cầu hỏi tồn kho, không thể sửa lại lựa chọn site");
-        }
-
-        // Validate: mặt hàng thuộc request, và site có kinh doanh mặt hàng đó
         List<RequestItem> items = riRepo.findByProcessRequestId(requestId);
         Set<Integer> requestMerchIds = items.stream().map(i -> i.getMerchandise().getId()).collect(Collectors.toSet());
         for (SitePickRequest p : picks) {
@@ -258,7 +235,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             }
         }
 
-        // Ghi đè toàn bộ lựa chọn cũ của request (cho phép sửa lại trước khi gửi)
         rsRepo.deleteByProcessRequestId(requestId);
 
         for (SitePickRequest p : picks) {
@@ -281,7 +257,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
         List<SitePickDTO> result = new ArrayList<>();
         for (RequestSite rs : rsRepo.findByProcessRequestId(requestId)) {
-            if (rs.getSite() == null) continue; // bỏ dòng REJECTED (không có site)
+            if (rs.getSite() == null) continue;
             SitePickDTO d = new SitePickDTO();
             int merchId = rs.getMerchandise().getId();
             d.merchandiseId = merchId;
@@ -301,8 +277,8 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     }
 
     // ============================================================
-    // 1-step workflow: trả thẳng (site × method) đáp ứng được desired_date
-    // Không cần hỏi tồn vì SiteMerchandise.stockQuantity đã sẵn.
+    // 1-step workflow: trả thẳng (site × method) đáp ứng được desired_date.
+    // Stock đọc thẳng từ SiteMerchandise.stockQuantity — không cần hỏi site.
     // ============================================================
     @Override
     public List<SiteOptionDTO> getSiteOptions(Integer requestId) {
@@ -334,7 +310,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
                                 String method, Integer days, LocalDate today, LocalDate desired) {
         if (days == null) return;
         LocalDate expected = today.plusDays(days);
-        if (desired != null && expected.isAfter(desired)) return; // không đúng hẹn → ẩn
+        if (desired != null && expected.isAfter(desired)) return;
         SiteOptionDTO.SiteRowDTO row = new SiteOptionDTO.SiteRowDTO();
         row.siteId = site.getId();
         row.siteCode = site.getCode();
@@ -349,111 +325,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     }
 
     // ============================================================
-    // Step 2: Gửi inquiry — mỗi site nhận danh sách mặt hàng được gán cho nó
-    // ============================================================
-    @Override
-    @Transactional
-    public void sendInquiries(Integer requestId) {
-        ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
-        List<RequestSite> pickedAssignments = rsRepo.findByRequestAndStatus(requestId, RequestSite.SelectionStatus.PICKED);
-
-        if (pickedAssignments.isEmpty()) {
-            throw new IllegalArgumentException("Chưa có mặt hàng nào được gán site (PICKED). Vui lòng chọn site cho các mặt hàng trước.");
-        }
-
-        // Nhóm theo site: siteId -> list<merchId>
-        Map<Integer, List<Integer>> siteToMerchIds = pickedAssignments.stream()
-            .collect(Collectors.groupingBy(
-                rs -> rs.getSite().getId(),
-                Collectors.mapping(rs -> rs.getMerchandise().getId(), Collectors.toList())
-            ));
-
-        for (Map.Entry<Integer, List<Integer>> entry : siteToMerchIds.entrySet()) {
-            int siteId = entry.getKey();
-            List<Integer> merchIds = entry.getValue();
-            Site site = siteRepo.findById(siteId).orElseThrow();
-
-            // Kiểm tra đã gửi inquiry cho site này chưa
-            List<StockInquiry> existing = siRepo.findByRequestAndSite(requestId, siteId);
-            if (!existing.isEmpty()) continue;
-
-            List<SiteMerchandise> sms = smRepo.findBySiteIdAndMerchandiseIds(siteId, merchIds);
-
-            StockInquiry si = new StockInquiry();
-            si.setProcessRequest(pr);
-            si.setSite(site);
-            si.setStatus(StockInquiry.InquiryStatus.PENDING);
-            si.setTimeoutAt(LocalDateTime.now().plusHours(48));
-            siRepo.save(si);
-
-            for (SiteMerchandise sm : sms) {
-                StockInquiryItem sii = new StockInquiryItem();
-                sii.setStockInquiry(si);
-                sii.setMerchandise(sm.getMerchandise());
-                sii.setQuantity(0);
-                siiRepo.save(sii);
-            }
-
-            // Cập nhật trạng thái assignment -> INQUIRY_SENT
-            for (RequestSite rs : pickedAssignments) {
-                if (rs.getSite() != null && rs.getSite().getId().equals(siteId)) {
-                    rs.setStatus(RequestSite.SelectionStatus.INQUIRY_SENT);
-                    rsRepo.save(rs);
-                }
-            }
-        }
-    }
-
-    // ============================================================
-    // Step 3: Trạng thái inquiry theo site
-    // ============================================================
-    @Override
-    public Map<Integer, InquiryStatusDTO> getInquiryStatus(Integer requestId) {
-        List<StockInquiry> inquiries = siRepo.findByProcessRequestId(requestId);
-        Map<Integer, InquiryStatusDTO> result = new HashMap<>();
-
-        for (StockInquiry si : inquiries) {
-            List<StockInquiryItem> items = siiRepo.findByStockInquiryId(si.getId());
-            InquiryStatusDTO dto = new InquiryStatusDTO();
-            dto.siteId = si.getSite().getId();
-            dto.siteCode = si.getSite().getCode();
-            dto.siteName = si.getSite().getName();
-            dto.timeoutAt = si.getTimeoutAt() != null ? si.getTimeoutAt().toString() : null;
-
-            int total = items.size();
-            int responded = (int) items.stream().filter(i -> i.getQuantity() > 0).count();
-            dto.totalItems = total;
-            dto.respondedCount = responded;
-
-            if (si.getStatus() == StockInquiry.InquiryStatus.TIMEOUT) {
-                dto.status = "TIMEOUT";
-            } else if (responded == total && total > 0) {
-                dto.status = "RESPONDED";
-            } else if (responded > 0) {
-                dto.status = "PARTIAL";
-            } else {
-                dto.status = "PENDING";
-            }
-
-            if (si.getRespondedAt() != null) {
-                dto.respondedAt = si.getRespondedAt().toString();
-            }
-
-            result.put(si.getSite().getId(), dto);
-        }
-        return result;
-    }
-
-    // ============================================================
-    // Step 4: Inventory matrix
-    // ============================================================
-    @Override
-    public Map<Integer, Map<Integer, StockInfoDTO>> getInventoryMatrix(Integer requestId) {
-        return inquiryService.getInventoryMatrix(requestId);
-    }
-
-    // ============================================================
-    // Tạo PO batch
+    // Step 2: Tạo PO batch — đọc tồn từ SiteMerchandise.stockQuantity.
     // ============================================================
     @Override
     @Transactional
@@ -464,13 +336,11 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
         ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
 
-        // Aggregate yêu cầu của sales theo merchandise (để check tổng số lượng nhập đủ chưa)
         Map<Integer, Integer> requestedByMerch = new HashMap<>();
         for (RequestItem ri : pr.getRequestItems()) {
             requestedByMerch.merge(ri.getMerchandise().getId(), ri.getQuantity(), Integer::sum);
         }
 
-        // Tổng số lượng nhập (do user phân bổ qua các PO) theo merchandise
         Map<Integer, Integer> orderedByMerch = new HashMap<>();
         for (CreatePORequest order : request.orders) {
             if (order.items == null) continue;
@@ -482,8 +352,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             }
         }
 
-        // Đúng yêu cầu: tổng số nhập >= số sales cần (cho phép vượt? không — = đúng để khớp UC).
-        // Mở rộng: cho phép vượt nhẹ nếu cần, ở đây giữ đúng số sales yêu cầu.
         for (Map.Entry<Integer, Integer> e : requestedByMerch.entrySet()) {
             int ordered = orderedByMerch.getOrDefault(e.getKey(), 0);
             if (ordered < e.getValue()) {
@@ -498,7 +366,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
         for (CreatePORequest order : request.orders) {
             Site site = siteRepo.findById(order.siteId).orElseThrow();
 
-            // Chỉ chấp nhận SHIP hoặc AIR (UC mới)
             String methodName = order.deliveryMethod != null ? order.deliveryMethod : "SHIP";
             if (!methodName.equals("SHIP") && !methodName.equals("AIR")) {
                 throw new IllegalArgumentException("Phương thức vận chuyển phải là SHIP hoặc AIR");
@@ -537,7 +404,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
                             + " vượt tồn kho " + stock + " của site " + site.getCode()
                             + " cho mặt hàng " + sm.getMerchandise().getCode());
                     }
-                    // Trừ tồn kho ngay khi gửi PO (Site sẽ nhận hàng đi)
                     sm.setStockQuantity(stock - item.quantity);
                     smRepo.save(sm);
 
@@ -567,7 +433,6 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             createdPOs.add(dto);
         }
 
-        // Đã đặt đủ → đánh dấu request DONE
         pr.setStatus(ProcessRequest.RequestStatus.DONE);
         prRepo.save(pr);
 

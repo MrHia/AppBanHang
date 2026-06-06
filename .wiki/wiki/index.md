@@ -2,7 +2,7 @@
 title: Index
 category: index
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-06
 ---
 
 # AppBanHang — Wiki Index
@@ -25,15 +25,19 @@ Master catalog. Read first to find relevant pages.
 - [[overview]] — Import Order Management System: Sales → Overseas → Site → Warehouse
 
 ## Components
-- [[components/backend-architecture]] — Spring Boot 3 layered (Controller→Service→Repo→Entity), 18 entities, 13 controllers, 1 scheduler
-- [[components/frontend-architecture]] — Next.js 14 Pages Router, 27 pages, 2 contexts, 11 API helpers
+- [[components/backend-architecture]] — Spring Boot 3 layered, ~16 services (sau Phase 2 ISP + loại bỏ inquiry), 12 controllers, 11 MapStruct mappers, **4 events**, 6 tests (post 2026-06-06)
+- [[components/backend-events]] — Observer pattern, **4 event types** (InquiryTimeoutEvent removed 2026-06-06)
+- [[components/processrequest-coordinator]] — Phase 2 ISP refactor: **4 services** extracted khỏi God Class (InquiryCoordination removed 2026-06-06)
+- [[components/frontend-architecture]] — Next.js 14 Pages Router, 27 pages, 2 contexts (vị trí khác), 11 API helpers
+- [[components/fe-component-library]] — 7 reusable components (Phase 4 done)
+- [[components/fe-custom-hooks]] — useAlert + useCRUDTable + useFormDialog (Phase 4)
 
 ## Features (per role / per UC)
 - [[features/uc1-auth-lifecycle]] — Login, BCrypt, lockout 5-fail/30min, must-change-password
 - [[features/uc4-sales-create-request]] — Sales tạo request với validation rules v1.1.0
-- [[features/uc6-overseas-process-request]] — 5-step Overseas workflow (Find→Pick→Send→Track→Aggregate)
-- [[features/uc7-stock-inquiry-timeout]] — 48h SLA, scheduler 5-min polling
-- [[features/uc11-12-purchase-order-lifecycle]] — PO DRAFT/SENT/CONFIRMED/REJECTED state machine
+- [[features/uc6-overseas-process-request]] — **2-step** Overseas workflow (Assign sites → Create PO) — was 5-step before 2026-06-06
+- [[features/uc7-stock-inquiry-timeout]] — ⚠️ **DEPRECATED** (subsystem removed 2026-06-06)
+- [[features/uc11-12-purchase-order-lifecycle]] — PO state machine; **REJECTED terminal + cascades to parent request** (2026-06-06)
 - [[features/uc15-20-warehouse-discrepancy]] — Receive + shortage/excess + Site response
 - [[features/uc16-notification-system]] — Cross-role bell icon + unread count
 
@@ -41,11 +45,14 @@ Master catalog. Read first to find relevant pages.
 - [[infra/docker-compose]] — MySQL 8 (3307) + Spring Boot (8081), FE not in stack
 
 ## Data
-- [[data/schema-overview]] — 18 tables, 4 clusters, 8 status enums
+- [[data/schema-overview]] — 16 tables (2026-06-06: -stock_inquiry, -stock_inquiry_item), 4 clusters, 6 status enums
 
 ## Decisions
 - [[decisions/bcrypt-password-hashing]] — Adopted v1.1.0, strength 10
 - [[decisions/role-cardinality]] — ADMIN/OVERSEAS/WAREHOUSE duy nhất, SITE/SALES nhiều (2026-06-04)
+- [[decisions/remove-stock-inquiry]] — **2026-06-06**: stock-inquiry subsystem deleted; Overseas đọc thẳng từ `site_merchandise.stock_quantity`
+- [[decisions/po-cancellation-cascade]] — **2026-06-06**: REJECTED terminal; cancel 1 PO cascades parent request + sibling POs + restore stock
+- ⚠️ Open contradiction (`x-20260606-01`): cột `plain_password` trên branch `refactor-all-code` mâu thuẫn quyết định BCrypt-only — xem [[contradictions]]
 
 ## Bugs
 - [[bugs/rejectpo-loses-reason]] — FIXED v1.1.0, motivates State pattern in refactor
@@ -76,14 +83,14 @@ Master catalog. Read first to find relevant pages.
 4. Diagrams: [[analysis/academic-uml-diagrams]] (Mermaid render trong GitHub)
 5. Plan: [[analysis/academic-refactor-plan]]
 
-📋 **Trạng thái hiện tại của codebase**:
-- BE Grade: **B- / 7.5/10** — good fundamentals (layered, interface-based, @Transactional), thiếu pattern discipline (God class ProcessRequestServiceImpl 531L, toDTO duplicated 14×)
-- FE Grade: **C / B-** — duplication nặng (CRUD pages 95% identical), pages quá to (process-request 780L), chỉ 2 reusable components
-- Target sau refactor: **A- to A (8.5-9.5/10)**
+📋 **Trạng thái hiện tại của codebase (cập nhật 2026-06-06)**:
+- BE Grade: từ **B- / 7.5/10** → tiến lên **~A- / 8.5** — Phase 2 (ISP split processrequest) + Phase 3 (Observer events) đã thực hiện. Bằng chứng: `service/impl/processrequest/` có **4 impl** + package `event/` có **4 events** (sau xóa stock-inquiry).
+- FE Grade: từ **C / B-** → tiến lên **~B+ / 8** — Phase 4 done. Bằng chứng: `components/index.js` re-export **7** reusable, `hooks/` có **3** custom hooks.
+- Target sau toàn bộ refactor: **A- to A (8.5-9.5/10)** — **tất cả 5 phases đều có evidence vật lý** trong code.
 
-🛠️ **Refactor priorities** (5 phases ~10 tuần):
-- P1: Mapper pattern + extract validators (1 tuần wins — eliminate 14× toDTO duplication)
-- P2: Split God Class + State pattern PO (DRAFT/SENT/CONFIRMED/REJECTED/RESET)
-- P3: Observer events + Strategy stock source + Chain of Responsibility
-- P4: FE Custom Hooks + reusable components (DataTable, FormDialog, ConfirmDialog, StatusChip, AlertSnackbar)
-- P5: Split mega pages + i18n cleanup
+🛠️ **Refactor progress (5 phases)**:
+- ✅ P1: Mapper pattern — DONE (MapStruct **11 mappers**, ModelMapper legacy ở pom nhưng không còn được dùng cho code mới)
+- ✅ P2: Split God Class — DONE (**4 services** extracted vào `processrequest/`); State pattern PO — REJECTED giờ terminal + cascade ([[decisions/po-cancellation-cascade]])
+- ✅ P3: Observer events — DONE (**4 events** trong `event/`); Strategy stock source pattern đã loại bỏ cùng stock-inquiry ([[decisions/remove-stock-inquiry]])
+- ✅ P4: FE Custom Hooks + reusable components — DONE (3 hooks, 7 components)
+- ✅ P5: Split mega pages — DONE (`process-request/[id].js` đã từ 780L baseline giảm xuống **180L**)

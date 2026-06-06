@@ -24,7 +24,8 @@ public class PurchaseOrderController {
         return ResponseEntity.ok(ApiResponse.ok(result));
     }
     @PutMapping("/{id}") public ResponseEntity<ApiResponse<Object>> update(@PathVariable Integer id, @RequestBody PurchaseOrderDTO dto) { return ResponseEntity.ok(ApiResponse.ok(service.update(id, dto))); }
-    // UC12: Update PO with items (when DRAFT after rejection)
+    // Update DRAFT PO with items (used by /po/draft flow).
+    // NOTE: REJECTED no longer revives to DRAFT — REJECTED is terminal.
     @PutMapping("/{id}/items") public ResponseEntity<ApiResponse<Object>> updateWithItems(@PathVariable Integer id, @RequestBody PurchaseOrderDTO dto) {
         try { return ResponseEntity.ok(ApiResponse.ok(service.updateWithItems(id, dto))); }
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage())); }
@@ -39,7 +40,7 @@ public class PurchaseOrderController {
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage())); }
     }
     @PostMapping("/{id}/reject") public ResponseEntity<ApiResponse<Object>> reject(@PathVariable Integer id, @RequestParam String reason) {
-        try { service.rejectPO(id, reason); return ResponseEntity.ok(ApiResponse.ok("PO rejected and returned to DRAFT", null)); }
+        try { service.rejectPO(id, reason); return ResponseEntity.ok(ApiResponse.ok("PO cancelled; parent request and sibling POs cascaded to CANCELLED", null)); }
         catch (RuntimeException e) { return ResponseEntity.badRequest().body(ApiResponse.error(e.getMessage())); }
     }
     @PostMapping("/{id}/done") public ResponseEntity<ApiResponse<Object>> done(@PathVariable Integer id) { service.markDone(id); return ResponseEntity.ok(ApiResponse.ok("PO marked done", null)); }

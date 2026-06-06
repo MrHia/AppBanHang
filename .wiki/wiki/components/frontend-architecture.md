@@ -1,15 +1,15 @@
 ---
 title: Frontend Architecture — Next.js 14 Pages Router
 category: components
-tags: [frontend, nextjs, react, mui, context, axios]
+tags: [frontend, nextjs, react, mui, context, axios, refactor-phase-4-done]
 sources: [ITSSFE/package.json, ITSSFE/src/**, agent-summary]
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-06
 ---
 
 # Frontend Architecture — Next.js 14 Pages Router
 
-> Pages Router (không phải App Router), 2 contexts (Auth + Language), 2 layouts (Dashboard + Auth), 11 API helper groups via Axios. Hoàn toàn CSR + sessionStorage auth.
+> Pages Router (không phải App Router), 1 AuthContext + 1 LanguageContext (vị trí khác nhau), 2 layouts (Dashboard + Auth), 11 API helper groups via Axios. CSR + sessionStorage auth. **Phase 4 refactor done**: từ 2 reusable components → 7, thêm 3 custom hooks (useAlert, useCRUDTable, useFormDialog) gom CRUD logic.
 
 ## Tech stack
 
@@ -23,7 +23,7 @@ updated: 2026-06-03
 | Routing | File-system based (`src/pages/`) |
 | i18n | Custom (vi.json / en.json) |
 
-## Page tree (27 pages)
+## Page tree (27 pages — `site/inquiries.js` removed 2026-06-06)
 
 ```
 src/pages/
@@ -46,15 +46,14 @@ src/pages/
 ├── overseas/
 │   ├── dashboard.js
 │   ├── requests.js
-│   ├── process-request.js                 # UC6 step 1 (entry)
-│   ├── process-request/[id].js            # UC6 step 2-5 (multi-step)
-│   ├── order-matrix/[id].js               # UC6 step 5 detail
+│   ├── process-request.js                 # UC6 entry
+│   ├── process-request/[id].js            # UC6 2-step wizard (180L, post-split)
+│   ├── order-matrix/[id].js               # Stock matrix detail (đọc từ SiteMerchandise)
 │   └── purchase-orders.js
 ├── site/
 │   ├── dashboard.js
-│   ├── merchandise.js                     # UC stock mgmt
-│   ├── inquiries.js                       # UC7 respond
-│   ├── purchase-orders.js                 # UC13 confirm/reject
+│   ├── merchandise.js                     # Site quản lý stock (single source of truth)
+│   ├── purchase-orders.js                 # UC13 confirm/cancel (cascades)
 │   └── discrepancies.js                   # UC19 respond
 └── warehouse/
     ├── dashboard.js
@@ -63,7 +62,9 @@ src/pages/
     └── discrepancies.js                   # UC20 resolve
 ```
 
-## Contexts (2)
+## Contexts (2 — vị trí khác nhau)
+
+`src/contexts/` chỉ có **AuthContext**. LanguageContext sống ở `src/i18n/LanguageContext.js` (gắn liền dictionary), không trong `contexts/`.
 
 ### AuthContext (`src/contexts/auth-context.js`)
 
@@ -109,7 +110,7 @@ state = { locale: 'en' | 'vi', t, ready }
 - **Response interceptor**: unwrap `{success, message, data}` → `data`
 - **401 handler**: clear sessionStorage → redirect `/auth/login`
 
-### API groups (11)
+### API groups (10 — `inquiryApi` removed 2026-06-06)
 
 | Group | Purpose | Endpoints used |
 |-------|---------|----------------|
@@ -117,14 +118,16 @@ state = { locale: 'en' | 'vi', t, ready }
 | accountApi | CRUD + lock/unlock + reset | `/api/accounts/*` |
 | siteApi | CRUD | `/api/sites/*` |
 | merchandiseApi | CRUD | `/api/merchandise/*` |
-| siteMerchandiseApi | per-site catalog | `/api/site-merchandise/*` |
-| requestApi | Full workflow (≈18 methods) | `/api/requests/*` |
-| inquiryApi | get, respond, matrix | `/api/inquiries/*` |
-| poApi | DRAFT/SENT/CONFIRM/REJECT/DONE | `/api/po/*` |
+| siteMerchandiseApi | per-site catalog + stock (single source of truth) | `/api/site-merchandise/*` |
+| requestApi | 2-step workflow (assign sites → create PO batch) | `/api/requests/*` |
+| poApi | DRAFT/SENT/CONFIRM/REJECT/DONE — reject **cascades** parent + siblings | `/api/po/*` |
 | warehouseApi | receive + discrepancy | `/api/warehouse/*` |
 | discrepancyApi | chat | `/api/discrepancies/*` |
 | notificationApi | bell | `/api/notifications/*` |
 | auditApi | log query | `/api/audit/*` |
+
+> [!info] Removed 2026-06-06
+> `inquiryApi` đã xóa cùng stock-inquiry subsystem. `requestApi` mất 3 methods: `sendInquiries`, `getInquiryStatus`, `getInventoryMatrix`. Xem [[decisions/remove-stock-inquiry]].
 
 ## i18n
 
@@ -135,10 +138,42 @@ state = { locale: 'en' | 'vi', t, ready }
 
 Pattern: `t('nav.dashboard')` → `dict.nav.dashboard`.
 
-## Shared components
+## Shared components (7 — Phase 4 refactor done)
 
-- `ProtectedRoute` — check `isAuthenticated` + `allowedRoles`; redirect `/auth/login` nếu fail
-- `Footer` — system name + copyright + lang switcher
+> Trước Phase 4: chỉ 2 reusable (`ProtectedRoute`, `Footer`). Phase 4 thêm 5 components + 3 hooks để gom CRUD pattern lặp lại 95% giữa các trang admin (accounts/sites/merchandise/...).
+
+Re-exported từ `src/components/index.js`:
+
+| Component | Vai trò | Usage pattern |
+|-----------|---------|---------------|
+| `ProtectedRoute` | Guard role-based access, redirect `/auth/login` | Bọc page-level: `<ProtectedRoute allowedRoles={['ADMIN']}>...</ProtectedRoute>` |
+| `Footer` | System name + copyright + lang switcher | Trong layouts |
+| `DataTable` | Bảng CRUD với columns + rows + emptyMessage | `<DataTable columns={...} rows={accounts} />` |
+| `FormDialog` | Modal Create/Edit; field-driven (key, label, type, options) | Đi cặp với `useFormDialog` hook |
+| `ConfirmDialog` | Modal xác nhận xoá | `<ConfirmDialog open onConfirm={...}>` |
+| `StatusChip` | MUI Chip với màu mapped sang status enum (POStatus, RequestStatus, ...) | Trong DataTable column render |
+| `AlertSnackbar` | Toast success/error với auto-close | Đi cặp với `useAlert` hook |
+
+## Custom hooks (`src/hooks/`, 3 — Phase 4)
+
+Mỗi hook encapsulate 1 concern lặp lại giữa các trang CRUD:
+
+| Hook | Trả về | Khi dùng |
+|------|--------|----------|
+| `useAlert()` | `{ alert, showSuccess, showError, closeAlert }` | Thay thế `useState` cho snackbar — gọn 1 dòng thay vì 4 |
+| `useCRUDTable(fetcher)` | `{ items, loading, reload }` + 15s auto-poll | Trang nào hiển thị list + cần refresh |
+| `useFormDialog({ initialState })` | `{ open, formData, isEditing, editingId, openDialog, closeDialog, setField }` | Mọi page có nút Create/Edit |
+
+**Pattern composition** (xem ví dụ thực tế trong [admin/accounts.js](ITSSFE/src/pages/admin/accounts.js)):
+
+```js
+const { items, reload } = useCRUDTable(() => accountApi.getAll());
+const form = useFormDialog({ initialState: INITIAL_FORM });
+const { alert, showSuccess, showError, closeAlert } = useAlert();
+// ... render <DataTable />, <FormDialog />, <AlertSnackbar />
+```
+
+Tác động: trang `admin/accounts.js` sau Phase 4 ≈ 137 lines so với pattern cũ ≈ 350+ lines (theo [[analysis/academic-code-review]] gốc).
 
 ## Build config
 
@@ -168,10 +203,9 @@ Pattern: `t('nav.dashboard')` → `dict.nav.dashboard`.
 
 ## Related
 
-- [[components/auth-context]] (sẽ tạo — chi tiết)
-- [[components/language-context]] (sẽ tạo)
-- [[components/api-client]] (sẽ tạo)
-- [[analysis/refactor-roadmap]] (sẽ tạo)
+- [[components/fe-component-library]] — 7 reusable components chi tiết (Phase 4)
+- [[components/fe-custom-hooks]] — 3 hooks chi tiết (Phase 4)
+- [[analysis/refactor-roadmap]] — Status: Phase 4 done
 
 ---
 

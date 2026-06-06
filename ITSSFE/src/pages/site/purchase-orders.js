@@ -59,8 +59,11 @@ function SitePOsContent() {
       </TableContainer>
       <Dialog open={rejectOpen} onClose={() => setRejectOpen(false)} maxWidth="sm" fullWidth>
         <DialogTitle>{t('site.purchaseOrders.rejectPurchaseOrder')}</DialogTitle>
-        <DialogContent><TextField fullWidth label={t('site.purchaseOrders.rejectReason')} multiline rows={3} value={reason} onChange={e => setReason(e.target.value)} margin="dense" /></DialogContent>
-        <DialogActions><Button onClick={() => setRejectOpen(false)}>{t('common.cancel')}</Button><Button variant="contained" color="error" onClick={handleReject}>{t('common.submit')}</Button></DialogActions>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>{t('site.purchaseOrders.rejectCascadeWarning')}</Alert>
+          <TextField fullWidth required label={t('site.purchaseOrders.rejectReason')} multiline rows={3} value={reason} onChange={e => setReason(e.target.value)} margin="dense" />
+        </DialogContent>
+        <DialogActions><Button onClick={() => setRejectOpen(false)}>{t('common.cancel')}</Button><Button variant="contained" color="error" onClick={handleReject} disabled={!reason.trim()}>{t('common.submit')}</Button></DialogActions>
       </Dialog>
     </Container>
   );

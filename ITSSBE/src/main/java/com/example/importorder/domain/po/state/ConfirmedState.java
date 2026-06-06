@@ -17,7 +17,10 @@ public class ConfirmedState implements POState {
 
     @Override
     public void reject(PurchaseOrder po, String reason) {
-        throw new IllegalStateException("Cannot reject CONFIRMED");
+        // Cancellation after Site confirmation — stock will be restored by the
+        // service layer for both the trigger PO and its siblings.
+        po.setRejectionReason(reason);
+        po.applyTransition(POStatus.REJECTED, POStateRegistry.get(POStatus.REJECTED));
     }
 
     @Override

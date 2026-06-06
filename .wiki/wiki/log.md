@@ -93,3 +93,40 @@ Chronological record of all wiki operations.
 - `docker compose up -d db` + backend local + curl: login đa role, lockout, change-password
 - Claims: c-20260604-05
 - Pages updated: [[index]] (link bug + decision mới)
+
+## [2026-06-06] review | Branch refactor-all-code — feature `plain_password` demo
+- Phạm vi review: 8 file modified trên branch `refactor-all-code` (BE entity/DTO/mapper/services/runner + FE accounts.js + SQL schema + seeds).
+- Bug đã fix: i18n key `common.edit` thiếu (tooltip render literal `"common.edit"`) + hardcoded VN `"Mật khẩu hiện tại"` chuyển sang `admin.accounts.currentPassword`.
+- Bug đã xác minh OK: MapStruct auto-map `plainPassword` (verified từ `AccountMapperImpl.java:38`).
+- Contradiction ghi nhận: x-20260606-01 (cột `plain_password` vs decision [[decisions/bcrypt-password-hashing]]).
+- Pages updated: [[contradictions]]
+
+## [2026-06-06] refactor | Remove stock-inquiry subsystem (Task 1) + cascade-cancel PO → ProcessRequest (Task 2)
+- Driver: user request — *"stock inquiry response cần phải bỏ đi vì mình không cần nó nữa"* và *"1 trong bất cứ purchased order ... bị huỷ thì đơn request tổng cần được hủy luôn"*.
+- BE deletions (21 files): entities `StockInquiry`/`StockInquiryItem`, DTOs `StockInquiryDTO`/`StockInquiryItemDTO`/`InquiryStatusDTO`/`StockInfoDTO`, repositories `StockInquiry*Repository`, services `IStockInquiryService`+impl, `IInquiryCoordinationService`+impl, controller `StockInquiryController`, mapper `StockInquiryMapper`, scheduler `StockInquiryTimeoutScheduler`, event `InquiryTimeoutEvent`, domain package `domain/inquiry/stocksource/` (6 files), test `StockSourceTest`.
+- BE modifications: `ProcessRequestServiceImpl` lost `sendInquiries`/`getInquiryStatus`/`getInventoryMatrix`; `IProcessRequestService` trimmed; `ProcessRequestController` lost 3 endpoints; `PONotificationListener.onInquiryTimeout` removed; `RequestSite.SelectionStatus` enum trimmed `PICKED, REJECTED, INQUIRY_SENT, RESPONDED, TIMEOUT` → `PICKED, REJECTED`; `RequestSiteRepository` orphan methods removed.
+- BE Task 2: `RejectedState` made TERMINAL; `DraftState` + `ConfirmedState` gained `reject()` to support cancellation from any non-terminal state; `PurchaseOrderServiceImpl.rejectPO` now cascades — parent request → CANCELLED, sibling POs → REJECTED (with cascade reason), stock restored for SENT/CONFIRMED siblings, audit + OVERSEAS notification fired; `SiteMerchandiseRepository` injection added; controller success message + UC12 comment retired.
+- FE deletions: `pages/site/inquiries.js`, `Step2SendInquiries.js`, `Step3Track.js`, old `Step4Matrix.js`. New: `Step2CreatePOs.js` (reads stock from `siteMerchandiseApi`).
+- FE modifications: 4-step wizard → 2 steps; SITE nav loses "Stock Inquiry Response"; `inquiryApi` + 3 `requestApi` inquiry methods removed; cancel buttons + cascade-warning Alerts added on `overseas/purchase-orders.js`, `site/purchase-orders.js`, `admin/purchase-orders.js`; site dashboard inquiry counter card removed; i18n keys pruned (80+ removed, ~10 new for cancel UX).
+- SQL: `DROP TABLE stock_inquiry_item; DROP TABLE stock_inquiry;` + `request_site.status` ENUM trim; `test-data-overseas.sql` rewritten with new scenarios A/B/C/D (last one demonstrates the cancel cascade).
+- Tests: BE `mvn test` → 39/39 pass. `POStateTest` rewritten: `rejectedStateResetPreservesReason` → `rejectedStateIsTerminal`; added `draftStateAllowsRejectAsCancellation` + `confirmedStateAllowsRejectAsCancellation`. `POEventPublishTest` lost the inquiry-timeout test.
+- Pages created: [[decisions/remove-stock-inquiry]], [[decisions/po-cancellation-cascade]]
+- Pages updated: [[features/uc7-stock-inquiry-timeout]] (marked deprecated), [[features/uc11-12-purchase-order-lifecycle]] (terminal REJECTED + cascade), [[features/uc6-overseas-process-request]] (2-step wizard), [[components/processrequest-coordinator]] (5→4 services), [[components/backend-events]] (5→4 events), [[components/backend-architecture]] (entity/service/event/mapper/test counts), [[index]], [[overview]], [[claims]] (+3 new).
+
+## [2026-06-06] re-ingest | Full project snapshot refresh
+- Lý do: user báo "đã chỉnh sửa quá nhiều trong code". Re-survey BE + FE qua Explore agent + filesystem.
+- Phát hiện chính:
+  - BE: service interfaces từ **13 → 18** (Phase 2 ISP refactor). Package `event/` mới với 5 events (Phase 3 Observer). MapStruct (KHÔNG ModelMapper) là layer mapping chính.
+  - FE: reusable components từ **2 → 7**. Mới có `hooks/` với **3 custom hooks** (Phase 4). Trang `process-request/[id].js` từ 780L → **180L** (Phase 5).
+  - DTOs: ~20 → **30** (thêm 10 workflow DTOs cho ISP refactor).
+  - Tests: 7 test files (auth, account, assignment, PO event, PO state, mapper, stock source).
+- Pages created: [[components/backend-events]], [[components/processrequest-coordinator]], [[components/fe-component-library]], [[components/fe-custom-hooks]]
+- Pages updated: [[components/backend-architecture]] (fix ModelMapper claim → MapStruct, +service table, +mapper table, +event table, +test table), [[components/frontend-architecture]] (+components, +hooks), [[index]] (refactor progress 5/5 ✅), [[overview]] (refactor evidence), [[claims]] (+8 claims c-20260606-01..08)
+
+## [2026-06-06] re-ingest #2 | Stock-inquiry subsystem deleted + PO cascade
+- Lý do: user thực hiện 2 thay đổi lớn cùng ngày: (a) xóa toàn bộ stock-inquiry subsystem, (b) cho phép cancel PO cascade lên request + siblings.
+- Verify counts mới:
+  - BE: 16 entities (-2), 12 controllers (-1), 16 services (-2), 11 mappers (-1), 4 events (-1), 0 scheduler (-1)
+  - FE: -1 page (`site/inquiries.js`), -1 API group (`inquiryApi`), wizard 4-step → 2-step
+- Pages tự cập nhật (linter user): [[components/processrequest-coordinator]] (5→4 services), [[components/backend-events]] (5→4 events), [[features/uc7-stock-inquiry-timeout]] (deprecated banner), [[decisions/remove-stock-inquiry]] (mới), [[decisions/po-cancellation-cascade]] (mới)
+- Pages đồng bộ thêm (turn này): [[components/backend-architecture]] (mapper count, controller count, related links), [[components/frontend-architecture]] (page tree, API groups), [[index]] (refactor progress counts), [[overview]] (P1/P5 counts), [[claims]] (+3 claims c-20260606-09..11)

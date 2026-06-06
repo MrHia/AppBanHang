@@ -1,9 +1,8 @@
 // ============================================================================
 //  Process Request — thin container/orchestrator.
-//  Loads the request + items + assignments + sites, owns the active step,
-//  and delegates each step's UI to a dedicated component.
-//
-//  Step components live in src/components/overseas/processrequest/.
+//  Two-step wizard (after the stock-inquiry removal):
+//    Step 1 — Assign one site per merchandise
+//    Step 2 — Review site stock + create PO batch
 // ============================================================================
 import * as React from 'react';
 import {
@@ -15,16 +14,13 @@ import ProtectedRoute from 'src/components/ProtectedRoute';
 import { useRouter } from 'next/router';
 import { requestApi } from 'src/api';
 import { useTranslation } from 'src/i18n/useTranslation';
-import SendIcon from '@mui/icons-material/Send';
 import SyncIcon from '@mui/icons-material/Sync';
 import FactCheckIcon from '@mui/icons-material/FactCheck';
-import TableChartIcon from '@mui/icons-material/TableChart';
+import ShoppingCartIcon from '@mui/icons-material/ShoppingCart';
 import Step1AssignSites from 'src/components/overseas/processrequest/Step1AssignSites';
-import Step2SendInquiries from 'src/components/overseas/processrequest/Step2SendInquiries';
-import Step3Track from 'src/components/overseas/processrequest/Step3Track';
-import Step4Matrix from 'src/components/overseas/processrequest/Step4Matrix';
+import Step2CreatePOs from 'src/components/overseas/processrequest/Step2CreatePOs';
 
-const STEP_ICONS = [FactCheckIcon, SendIcon, SyncIcon, TableChartIcon];
+const STEP_ICONS = [FactCheckIcon, ShoppingCartIcon];
 
 function ProcessRequestContent() {
   const { t } = useTranslation();
@@ -42,8 +38,6 @@ function ProcessRequestContent() {
   const stepLabels = [
     t('overseas.processRequest.stepLabels.step1'),
     t('overseas.processRequest.stepLabels.step2'),
-    t('overseas.processRequest.stepLabels.step3'),
-    t('overseas.processRequest.stepLabels.step4'),
   ];
 
   React.useEffect(() => {
@@ -83,11 +77,10 @@ function ProcessRequestContent() {
   );
 
   const isProcessing = request.status === 'PROCESSING';
-  const hasSentInquiries = assignments.some(a => a.status === 'INQUIRY_SENT' || a.status === 'RESPONDED' || a.status === 'TIMEOUT');
   const handleNext = () => setActiveStep(s => Math.min(s + 1, stepLabels.length - 1));
   const handleBack = () => setActiveStep(s => Math.max(s - 1, 0));
   const statusLabel = request.status === 'PROCESSING' ? t('overseas.processRequest.processing') : request.status === 'DONE' ? t('overseas.processRequest.completed') : request.status;
-  const statusColor = request.status === 'PROCESSING' ? 'info' : request.status === 'DONE' ? 'success' : 'warning';
+  const statusColor = request.status === 'PROCESSING' ? 'info' : request.status === 'DONE' ? 'success' : request.status === 'CANCELLED' ? 'error' : 'warning';
 
   return React.createElement(Container, { maxWidth: 'xl', sx: { pb: 4 } },
     React.createElement('style', null, '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }'),
@@ -145,10 +138,8 @@ function ProcessRequestContent() {
           ),
           React.createElement(Card, { sx: { border: '1px solid #E2E8F0' }, elevation: 0 },
             React.createElement(CardContent, null,
-              activeStep === 0 && React.createElement(Step1AssignSites, { requestId: request.id, items, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext }),
-              activeStep === 1 && React.createElement(Step2SendInquiries, { requestId: request.id, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext, setAssignments }),
-              activeStep === 2 && React.createElement(Step3Track, { requestId: request.id, assignments, sites, hasSentInquiries, onBack: handleBack, onNext: handleNext }),
-              activeStep === 3 && React.createElement(Step4Matrix, { requestId: request.id, items, assignments, sites, hasSentInquiries, onBack: handleBack })
+              activeStep === 0 && React.createElement(Step1AssignSites, { requestId: request.id, items, assignments, sites, onBack: handleBack, onNext: handleNext }),
+              activeStep === 1 && React.createElement(Step2CreatePOs, { requestId: request.id, items, sites, onBack: handleBack })
             )
           )
         )
@@ -167,7 +158,8 @@ function ProcessRequestContent() {
             },
             children: t('overseas.processRequest.startProcessing')
           }),
-          request.status === 'DONE' && React.createElement(Typography, { variant: 'body2', color: 'success.main', fontWeight: 600, children: t('overseas.processRequest.requestCompleted') })
+          request.status === 'DONE' && React.createElement(Typography, { variant: 'body2', color: 'success.main', fontWeight: 600, children: t('overseas.processRequest.requestCompleted') }),
+          request.status === 'CANCELLED' && React.createElement(Typography, { variant: 'body2', color: 'error.main', fontWeight: 600, children: t('overseas.processRequest.requestCancelled') })
         ),
     React.createElement(Box, { sx: { mt: 3 } }, React.createElement(Button, { onClick: () => router.back(), children: t('overseas.processRequest.backToList') }))
   );

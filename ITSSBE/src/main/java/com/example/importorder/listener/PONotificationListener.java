@@ -1,7 +1,6 @@
 package com.example.importorder.listener;
 
 import com.example.importorder.event.DiscrepancyCreatedEvent;
-import com.example.importorder.event.InquiryTimeoutEvent;
 import com.example.importorder.event.POConfirmedEvent;
 import com.example.importorder.service.INotificationService;
 import lombok.RequiredArgsConstructor;
@@ -34,17 +33,6 @@ public class PONotificationListener {
                 "PO #" + e.poCode() + ": " + e.merchandiseName() + " thiếu " + e.shortage() + " chiếc. Vui lòng phối hợp với Site " + e.siteName() + " giải quyết.",
                 "purchase_order",
                 e.poId()
-        );
-    }
-
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
-    public void onInquiryTimeout(InquiryTimeoutEvent e) {
-        notificationService.createNotification(
-                "OVERSEAS",
-                "Site timeout phản hồi tồn kho",
-                "Site " + e.siteName() + " không phản hồi inquiry cho request " + e.processRequestCode() + " trong 48h.",
-                "stock_inquiry",
-                e.inquiryId()
         );
     }
 }

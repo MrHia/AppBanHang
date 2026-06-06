@@ -58,22 +58,6 @@ class POEventPublishTest {
     }
 
     @Test
-    void notificationListenerNotifiesOverseasOnInquiryTimeout() {
-        INotificationService notificationService = mock(INotificationService.class);
-        PONotificationListener listener = new PONotificationListener(notificationService);
-
-        listener.onInquiryTimeout(new InquiryTimeoutEvent(42, "REQ-100", "Site US"));
-
-        verify(notificationService).createNotification(
-                eq("OVERSEAS"),
-                contains("timeout"),
-                contains("REQ-100"),
-                eq("stock_inquiry"),
-                eq(42)
-        );
-    }
-
-    @Test
     void emailListenerSendsPOConfirmationEmail() {
         IEmailService emailService = mock(IEmailService.class);
         POEmailListener listener = new POEmailListener(emailService);

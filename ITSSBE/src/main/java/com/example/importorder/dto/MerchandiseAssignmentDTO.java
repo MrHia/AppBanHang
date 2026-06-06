@@ -10,6 +10,6 @@ public class MerchandiseAssignmentDTO {
     public String assignedSiteCode;
     public String assignedSiteName;
     public String assignedSiteCountry;
-    public String status; // PENDING | PICKED | REJECTED | INQUIRY_SENT | RESPONDED | TIMEOUT
+    public String status; // PENDING | PICKED | REJECTED
     public String rejectReason;
 }

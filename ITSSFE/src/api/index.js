@@ -116,25 +116,8 @@ export const requestApi = {
   saveSitePicks: (id, picks) => wrap('post', `/requests/${id}/site-picks`, picks),
   // 1-step workflow: trả thẳng (site × method) đúng hẹn + tồn kho cho từng mặt hàng
   getSiteOptions: (id) => wrap('get', `/requests/${id}/site-options`),
-  // Step 2
-  sendInquiries: (id) => wrap('post', `/requests/${id}/send-inquiries`),
-  // Step 3
-  getInquiryStatus: (id) => wrap('get', `/requests/${id}/inquiry-status`),
-  // Step 4
-  getInventoryMatrix: (id) => wrap('get', `/requests/${id}/inventory-matrix`),
-  // Tạo PO
+  // Step 2: Tạo PO batch
   createPOBatch: (id, orders) => wrap('post', `/requests/${id}/po-batch`, orders),
-};
-
-export const inquiryApi = {
-  getAll: () => wrap('get', '/inquiries'),
-  getByRequest: (id) => wrap('get', `/inquiries/request/${id}`),
-  getPendingForSite: (siteId) => wrap('get', `/inquiries/site/${siteId}/pending`),
-  getById: (id) => wrap('get', `/inquiries/${id}`),
-  getItems: (id) => wrap('get', `/inquiries/${id}/items`),
-  createForRequest: (id) => wrap('post', `/inquiries/request/${id}/create`),
-  respond: (id, items) => wrap('post', `/inquiries/${id}/respond`, items),
-  getMatrix: (id) => wrap('get', `/inquiries/matrix/${id}`),
 };
 
 export const poApi = {

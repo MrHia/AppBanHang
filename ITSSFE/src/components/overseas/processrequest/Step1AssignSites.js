@@ -12,7 +12,7 @@ import { requestApi } from 'src/api';
 import { useTranslation } from 'src/i18n/useTranslation';
 import StatusBadge from './StatusBadge';
 
-export default function Step1AssignSites({ requestId, items, assignments, sites, hasSentInquiries, onBack, onNext }) {
+export default function Step1AssignSites({ requestId, items, assignments, sites, onBack, onNext }) {
   const { t } = useTranslation();
   const [assignMap, setAssignMap] = React.useState({});
   const [saving, setSaving] = React.useState(false);
@@ -149,7 +149,7 @@ export default function Step1AssignSites({ requestId, items, assignments, sites,
       React.createElement(Chip, { label: t('overseas.processRequest.pending') + ': ' + items.filter(i => !assignMap[i.merchandiseId]?.siteId && !assignMap[i.merchandiseId]?.rejectReason).length, color: 'default', variant: 'outlined' })
     ),
     React.createElement(Box, { sx: { mt: 3, display: 'flex', justifyContent: 'space-between' } },
-      React.createElement(Button, { onClick: onBack, disabled: hasSentInquiries, children: t('overseas.processRequest.back') }),
+      React.createElement(Button, { onClick: onBack, children: t('overseas.processRequest.back') }),
       React.createElement(Button, { variant: 'contained', onClick: handleNext, disabled: saving, startIcon: React.createElement(FactCheckIcon) },
         saving ? t('overseas.processRequest.saving') : t('overseas.processRequest.saveAndContinue')
       )

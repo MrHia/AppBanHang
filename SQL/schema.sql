@@ -143,7 +143,7 @@ CREATE TABLE IF NOT EXISTS request_site (
     process_request_id INT NOT NULL,
     site_id INT NOT NULL,
     merchandise_id INT NOT NULL,
-    status ENUM('PICKED','REJECTED','INQUIRY_SENT','RESPONDED','TIMEOUT') DEFAULT 'PICKED',
+    status ENUM('PICKED','REJECTED') DEFAULT 'PICKED',
     reject_reason TEXT,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (process_request_id) REFERENCES process_request(id) ON DELETE CASCADE,
@@ -156,31 +156,19 @@ CREATE TABLE IF NOT EXISTS request_site (
 -- ALTER TABLE request_site DROP COLUMN IF EXISTS selected_merchandise_ids;
 
 -- =========================================
--- Table: stock_inquiry (inventory check requests)
+-- Migration: trim stale request_site statuses (INQUIRY_SENT, RESPONDED, TIMEOUT)
+-- after the stock-inquiry subsystem was removed. Map them all back to PICKED.
 -- =========================================
-CREATE TABLE IF NOT EXISTS stock_inquiry (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    process_request_id INT NOT NULL,
-    site_id INT NOT NULL,
-    status ENUM('PENDING','RESPONDED','PARTIAL','TIMEOUT') DEFAULT 'PENDING',
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-    responded_at DATETIME,
-    timeout_at DATETIME,
-    FOREIGN KEY (process_request_id) REFERENCES process_request(id),
-    FOREIGN KEY (site_id) REFERENCES site(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+UPDATE request_site SET status = 'PICKED' WHERE status IN ('INQUIRY_SENT', 'RESPONDED', 'TIMEOUT');
+ALTER TABLE request_site MODIFY COLUMN status ENUM('PICKED','REJECTED') DEFAULT 'PICKED';
 
 -- =========================================
--- Table: stock_inquiry_item (replied stock per inquiry)
+-- Migration: stock-inquiry subsystem removed.
+-- The Site no longer responds to inquiries; Overseas reads stock directly
+-- from site_merchandise.stock_quantity (UC7 deprecated).
 -- =========================================
-CREATE TABLE IF NOT EXISTS stock_inquiry_item (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    stock_inquiry_id INT NOT NULL,
-    merchandise_id INT NOT NULL,
-    quantity INT DEFAULT 0,
-    FOREIGN KEY (stock_inquiry_id) REFERENCES stock_inquiry(id) ON DELETE CASCADE,
-    FOREIGN KEY (merchandise_id) REFERENCES merchandise(id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+DROP TABLE IF EXISTS stock_inquiry_item;
+DROP TABLE IF EXISTS stock_inquiry;
 
 -- =========================================
 -- Table: purchase_order (PO sent to sites)

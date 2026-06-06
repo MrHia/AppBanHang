@@ -1,5 +1,5 @@
 import * as React from 'react';
-import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Box, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Alert } from '@mui/material';
+import { Container, Typography, Table, TableBody, TableCell, TableContainer, TableHead, TableRow, Paper, Chip, Button, Box, FormControl, InputLabel, Select, MenuItem, Dialog, DialogTitle, DialogContent, DialogActions, Alert, TextField } from '@mui/material';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
 import { poApi } from 'src/api';
@@ -16,6 +16,9 @@ function AdminPurchaseOrders() {
   const [detailOpen, setDetailOpen] = React.useState(false);
   const [detailPO, setDetailPO] = React.useState(null);
   const [details, setDetails] = React.useState([]);
+  const [cancelOpen, setCancelOpen] = React.useState(false);
+  const [cancelPO, setCancelPO] = React.useState(null);
+  const [cancelReason, setCancelReason] = React.useState('');
 
   const load = React.useCallback(() => {
     poApi.getAll().then(r => setPOs(Array.isArray(r?.data) ? r.data : (Array.isArray(r) ? r : []))).catch(console.error);
@@ -30,15 +33,32 @@ function AdminPurchaseOrders() {
     return arr;
   }, [pos, sort]);
 
+  // Admin can still force a status via PUT for data-fix purposes — but a real
+  // cancellation should go through the cascade endpoint (poApi.reject), which
+  // also cancels the parent request and sibling POs and restores stock.
   const changeStatus = async (p, status) => {
     try { await poApi.update(p.id, { status }); setPOs(prev => prev.map(x => x.id === p.id ? { ...x, status } : x)); setAlert(`Đã đổi trạng thái ${p.code} → ${status}`); }
     catch (e) { setAlert(typeof e === 'string' ? e : (e?.message || 'Lỗi')); }
+  };
+
+  const openCancel = (p) => { setCancelPO(p); setCancelReason(''); setCancelOpen(true); };
+  const handleCancel = async () => {
+    try {
+      await poApi.reject(cancelPO.id, cancelReason);
+      setAlert(`Đã hủy PO ${cancelPO.code} — request cha và các PO anh em cũng đã được hủy`);
+      setCancelOpen(false);
+      load();
+    } catch (e) {
+      setAlert(typeof e === 'string' ? e : (e?.message || 'Lỗi'));
+    }
   };
 
   const openDetails = async (p) => {
     setDetailPO(p); setDetails([]); setDetailOpen(true);
     try { const d = await poApi.getDetails(p.id); setDetails(Array.isArray(d) ? d : (Array.isArray(d?.data) ? d.data : [])); } catch (e) { console.error(e); }
   };
+
+  const isCancellable = (status) => status !== 'REJECTED' && status !== 'DONE';
 
   return (
     <Container maxWidth="xl">
@@ -83,7 +103,14 @@ function AdminPurchaseOrders() {
                     </FormControl>
                   </Box>
                 </TableCell>
-                <TableCell><Button size="small" variant="outlined" onClick={() => openDetails(p)}>Chi tiết</Button></TableCell>
+                <TableCell>
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <Button size="small" variant="outlined" onClick={() => openDetails(p)}>Chi tiết</Button>
+                    {isCancellable(p.status) && (
+                      <Button size="small" variant="outlined" color="error" onClick={() => openCancel(p)}>Hủy PO</Button>
+                    )}
+                  </Box>
+                </TableCell>
               </TableRow>
             ))}
             {sorted.length === 0 && <TableRow><TableCell colSpan={6} align="center" sx={{ py: 4 }}>Chưa có purchase order nào.</TableCell></TableRow>}
@@ -104,6 +131,20 @@ function AdminPurchaseOrders() {
           </Table>
         </DialogContent>
         <DialogActions><Button onClick={() => setDetailOpen(false)}>Đóng</Button></DialogActions>
+      </Dialog>
+
+      <Dialog open={cancelOpen} onClose={() => setCancelOpen(false)} maxWidth="sm" fullWidth>
+        <DialogTitle>Hủy PO {cancelPO?.code}</DialogTitle>
+        <DialogContent>
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            ⚠️ Hủy PO này sẽ hủy luôn Process Request {cancelPO?.processRequestCode ? `(${cancelPO.processRequestCode})` : ''} và mọi PO khác cùng request. Tồn kho đã trừ sẽ được hoàn lại.
+          </Alert>
+          <TextField fullWidth required label="Lý do hủy" multiline rows={3} value={cancelReason} onChange={e => setCancelReason(e.target.value)} margin="dense" />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setCancelOpen(false)}>Đóng</Button>
+          <Button variant="contained" color="error" onClick={handleCancel} disabled={!cancelReason.trim()}>Hủy PO</Button>
+        </DialogActions>
       </Dialog>
     </Container>
   );

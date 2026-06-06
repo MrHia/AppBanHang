@@ -17,7 +17,10 @@ public class DraftState implements POState {
 
     @Override
     public void reject(PurchaseOrder po, String reason) {
-        throw new IllegalStateException("Cannot reject DRAFT — only SENT can be rejected");
+        // Cancellation (DRAFT → REJECTED) — DRAFT POs have not deducted stock yet,
+        // so stock-restore is a no-op for them (handled at the service layer).
+        po.setRejectionReason(reason);
+        po.applyTransition(POStatus.REJECTED, POStateRegistry.get(POStatus.REJECTED));
     }
 
     @Override

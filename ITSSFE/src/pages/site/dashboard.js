@@ -2,21 +2,21 @@ import * as React from 'react';
 import { Container, Typography, Grid, Card, CardContent } from '@mui/material';
 import DashboardLayout from 'src/layouts/dashboard';
 import ProtectedRoute from 'src/components/ProtectedRoute';
-import { inquiryApi, poApi } from 'src/api';
+import { poApi } from 'src/api';
 import { useAuth } from 'src/contexts/auth-context';
 import { useTranslation } from 'src/i18n/useTranslation';
 
 function SiteDashboard() {
   const { t } = useTranslation();
   const { user } = useAuth();
-  const [stats, setStats] = React.useState({ inquiries: 0, pos: 0 });
+  const [stats, setStats] = React.useState({ pos: 0 });
   const userRef = React.useRef(user);
   React.useEffect(() => { userRef.current = user; }, [user]);
 
   const loadStats = React.useCallback(() => {
     if (!userRef.current?.siteId) return;
-    Promise.all([inquiryApi.getPendingForSite(userRef.current.siteId), poApi.getBySite(userRef.current.siteId)])
-      .then(([i, p]) => setStats({ inquiries: Array.isArray(i) ? i.length : 0, pos: Array.isArray(p) ? p.length : 0 }))
+    poApi.getBySite(userRef.current.siteId)
+      .then(p => setStats({ pos: Array.isArray(p) ? p.length : 0 }))
       .catch(console.error);
   }, []);
 
@@ -27,7 +27,6 @@ function SiteDashboard() {
   }, [loadStats]);
 
   const cards = [
-    { labelKey: 'site.dashboard.stockCheckRequests', value: stats.inquiries, color: '#F59E0B' },
     { labelKey: 'site.dashboard.purchaseOrders', value: stats.pos, color: '#2563EB' },
   ];
   return (

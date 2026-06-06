@@ -36,7 +36,6 @@ const menuItems = {
   SITE: [
     { labelKey: 'nav.dashboard', icon: <DashboardIcon />, href: '/site/dashboard' },
     { labelKey: 'nav.businessMerchandise', icon: <InventoryIcon />, href: '/site/merchandise' },
-    { labelKey: 'nav.stockInquiryResponse', icon: <AssignmentIcon />, href: '/site/inquiries' },
     { labelKey: 'nav.purchaseOrders', icon: <LocalShippingIcon />, href: '/site/purchase-orders' },
     { labelKey: 'nav.handleDiscrepancies', icon: <AssignmentIcon />, href: '/site/discrepancies' },
   ],

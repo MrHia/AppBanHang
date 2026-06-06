@@ -14,5 +14,5 @@ public class SitePickDTO {
     public String siteCode;
     public String siteName;
     public String siteCountry;
-    public String status; // PICKED | INQUIRY_SENT | RESPONDED | TIMEOUT
+    public String status; // PICKED | REJECTED
 }

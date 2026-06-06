@@ -79,25 +79,65 @@ class POStateTest {
         assertThat(po.getRejectionReason()).isEqualTo("out of stock");
     }
 
-    // --- REJECTED ------------------------------------------------------------
+    // --- REJECTED (terminal) -------------------------------------------------
 
     /**
-     * The reset-from-rejected transition must preserve the rejectionReason
-     * field. This was the original bug encoded into the State pattern:
-     * RejectedState.resetFromRejected() intentionally does NOT clear the
-     * reason so that history is retained when the PO loops back to DRAFT.
+     * REJECTED is a TERMINAL state — once cancelled, a PO cannot be revived.
+     * Cancellation cascades to the parent ProcessRequest at the service layer
+     * (see PurchaseOrderServiceImpl#rejectPO).
      */
     @Test
-    void rejectedStateResetPreservesReason() {
-        PurchaseOrder po = po(POStatus.REJECTED);
-        po.setRejectionReason("out of stock");
+    void rejectedStateIsTerminal() {
+        PurchaseOrder rejected = po(POStatus.REJECTED);
+        rejected.setRejectionReason("out of stock");
 
-        po.resetFromRejected();
+        assertThatThrownBy(rejected::send)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("REJECTED");
+        assertThatThrownBy(rejected::confirm)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("REJECTED");
+        assertThatThrownBy(() -> rejected.reject("again"))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("REJECTED");
+        assertThatThrownBy(rejected::resetFromRejected)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("REJECTED");
+        assertThatThrownBy(rejected::markDone)
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("REJECTED");
 
-        assertThat(po.getStatus()).isEqualTo(POStatus.DRAFT);
-        assertThat(po.getRejectionReason())
-                .as("resetFromRejected() must NOT wipe the historical rejectionReason")
+        assertThat(rejected.getStatus())
+                .as("terminal state must not mutate on illegal transition attempts")
+                .isEqualTo(POStatus.REJECTED);
+        assertThat(rejected.getRejectionReason())
+                .as("rejection reason must be preserved in the terminal state")
                 .isEqualTo("out of stock");
+    }
+
+    /**
+     * Cancellation is now reachable from any non-terminal state — including
+     * DRAFT and CONFIRMED — because Overseas/Admin can cancel a PO at any
+     * point before completion.
+     */
+    @Test
+    void draftStateAllowsRejectAsCancellation() {
+        PurchaseOrder po = po(POStatus.DRAFT);
+
+        po.reject("changed plan");
+
+        assertThat(po.getStatus()).isEqualTo(POStatus.REJECTED);
+        assertThat(po.getRejectionReason()).isEqualTo("changed plan");
+    }
+
+    @Test
+    void confirmedStateAllowsRejectAsCancellation() {
+        PurchaseOrder po = po(POStatus.CONFIRMED);
+
+        po.reject("supplier dispute");
+
+        assertThat(po.getStatus()).isEqualTo(POStatus.REJECTED);
+        assertThat(po.getRejectionReason()).isEqualTo("supplier dispute");
     }
 
     // --- CONFIRMED -----------------------------------------------------------

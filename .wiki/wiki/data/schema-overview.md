@@ -1,5 +1,5 @@
 ---
-title: Data Schema — 18 tables, MySQL 8
+title: Data Schema — 16 tables, MySQL 8 (post 2026-06-06 stock-inquiry removal)
 category: data
 tags: [schema, mysql, jpa, entity-mapping]
 sources: [SQL/schema.sql, SQL/migration_multisite_request_site.sql, agent-summary]
@@ -7,9 +7,12 @@ created: 2026-06-03
 updated: 2026-06-03
 ---
 
-# Data Schema — 18 tables, MySQL 8
+# Data Schema — 16 tables, MySQL 8
 
-> Schema chia 4 cluster: **Identity** (role, site, account), **Catalog** (merchandise, site_merchandise), **Workflow** (request, inquiry, po, receipt, discrepancy), **Cross-cutting** (notification, audit_log).
+> Schema chia 4 cluster: **Identity** (role, site, account), **Catalog** (merchandise, site_merchandise), **Workflow** (request, po, receipt, discrepancy), **Cross-cutting** (notification, audit_log).
+
+> [!info] 2026-06-06 — `stock_inquiry` + `stock_inquiry_item` đã DROP
+> Xem [[decisions/remove-stock-inquiry]]. `request_site.status` enum đã trim từ 5 giá trị xuống 2 (`PICKED, REJECTED`). Schema.sql có migration script chạy idempotent: `UPDATE request_site SET status='PICKED' WHERE status IN (...); ALTER TABLE … MODIFY COLUMN status ENUM('PICKED','REJECTED'); DROP TABLE stock_inquiry_item; DROP TABLE stock_inquiry;`.
 
 ## Cluster diagram
 
@@ -45,19 +48,11 @@ updated: 2026-06-03
             │ 1:N             │         │
    ┌────────▼──────┐  ┌──────▼──────┐  │
    │ request_item  │  │ request_site│ ─┤
-   └───────────────┘  │ status:PICKED│
+   └───────────────┘  │ status:     │
+                      │  PICKED |   │
                       │  REJECTED   │
-                      │  INQUIRY_*  │
                       └─────────────┘
             │
-            │ 1:N
-   ┌────────▼──────┐
-   │ stock_inquiry │ ─┐
-   │ status: PEND… │  │ 1:N
-   └────────┬──────┘  ▼
-            │     ┌──────────────────┐
-            │     │ stock_inquiry_item│
-            │     └──────────────────┘
             │ 1:N
    ┌────────▼──────────┐
    │ purchase_order    │ ─┐
@@ -90,7 +85,7 @@ updated: 2026-06-03
    └──────────────┘  └──────────┘
 ```
 
-## Tables (18)
+## Tables (16)
 
 ### Identity
 - **role** (id, name): ADMIN, OVERSEAS, SITE, WAREHOUSE, SALES
@@ -106,14 +101,10 @@ updated: 2026-06-03
 **Sales request:**
 - **process_request** (id, code, desired_date, notes, status, created_by, timestamps) — status PENDING/PROCESSING/DONE/CANCELLED
 - **request_item** (id, process_request_id CASCADE, merchandise_id, quantity, unit)
-- **request_site** (id, process_request_id CASCADE, site_id, merchandise_id, status, reject_reason, created_at), unique(process_request_id, merchandise_id, site_id) — status PICKED/REJECTED/INQUIRY_SENT/RESPONDED/TIMEOUT
-
-**Stock inquiry:**
-- **stock_inquiry** (id, process_request_id, site_id, status, created_at, responded_at, timeout_at) — status PENDING/RESPONDED/PARTIAL/TIMEOUT
-- **stock_inquiry_item** (id, stock_inquiry_id CASCADE, merchandise_id, quantity)
+- **request_site** (id, process_request_id CASCADE, site_id, merchandise_id, status, reject_reason, created_at), unique(process_request_id, merchandise_id, site_id) — **status PICKED/REJECTED only** (2026-06-06: -INQUIRY_SENT, -RESPONDED, -TIMEOUT)
 
 **Purchase order:**
-- **purchase_order** (id, code, process_request_id, site_id, status, delivery_method, expected_delivery, rejection_reason, created_at, confirmed_at) — status DRAFT/SENT/CONFIRMED/REJECTED/DONE, delivery_method SHIP/AIR/LAND
+- **purchase_order** (id, code, process_request_id, site_id, status, delivery_method, expected_delivery, rejection_reason, created_at, confirmed_at) — status DRAFT/SENT/CONFIRMED/**REJECTED (terminal, cascades to parent request)**/DONE, delivery_method SHIP/AIR/LAND
 - **po_detail** (id, purchase_order_id CASCADE, merchandise_id, quantity, unit)
 
 **Warehouse:**
@@ -134,7 +125,7 @@ updated: 2026-06-03
 - **Merchandise**: 10 items (MH-001..MH-010)
 - **Site inventory**: 14 assignments (5 per site for US/JP, 6 for DE)
 
-Test data file (`SQL/test-data-overseas.sql`) loads 6 scenarios `REQ-TEST-STEP1`..`REQ-TEST-TIMEOUT` for E2E testing.
+Test data file (`SQL/test-data-overseas.sql`) loads 4 scenarios: `REQ-TEST-STEP1` (PENDING, no assignments), `REQ-TEST-STEP2` (PROCESSING, PICKED), `REQ-TEST-DONE` (DONE with 2 SENT POs), `REQ-TEST-CANCELLED` (demonstrates the PO cancellation cascade — 2 POs REJECTED + parent CANCELLED).
 
 ## Migration history
 
@@ -164,7 +155,9 @@ Test data file (`SQL/test-data-overseas.sql`) loads 6 scenarios `REQ-TEST-STEP1`
 
 - [[components/backend-architecture]] — entity → service mapping
 - [[features/uc4-sales-create-request]] — process_request + request_item
-- [[features/uc6-overseas-process-request]] — request_site + stock_inquiry
+- [[features/uc6-overseas-process-request]] — request_site (PICKED/REJECTED) + 2-step workflow
+- [[decisions/remove-stock-inquiry]] — context for the 2 dropped tables
+- [[decisions/po-cancellation-cascade]] — context for PO REJECTED becoming terminal + cascade
 - [[features/uc11-12-purchase-order-lifecycle]] — purchase_order + po_detail
 - [[features/uc15-20-warehouse-discrepancy]] — receipt + discrepancy
 - [[infra/docker-compose]] (sẽ tạo)

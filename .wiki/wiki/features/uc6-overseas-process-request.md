@@ -1,109 +1,80 @@
 ---
-title: UC6 — Overseas xử lý Process Request (5 bước)
+title: UC6 — Overseas xử lý Process Request (2 bước, sau refactor 2026-06-06)
 category: features
-tags: [overseas, process-request, stock-inquiry, multi-site]
-sources: [DOCS/USER_GUIDE.md]
+tags: [overseas, process-request, multi-site]
+sources: [DOCS/USER_GUIDE.md, ITSSFE/src/pages/overseas/process-request/[id].js]
 created: 2026-06-03
-updated: 2026-06-03
+updated: 2026-06-06
 ---
 
 # UC6 — Overseas xử lý Process Request
 
-> 5 bước: Find sites → Pick sites & merchandise → Send inquiries → Track responses → Aggregate & create POs (see [[claims#c-20260603-11]]).
+> 2 bước (sau khi stock-inquiry subsystem được loại bỏ): **Assign Site cho từng mặt hàng → Tạo PO batch**. Stock đọc trực tiếp từ `SiteMerchandise.stock_quantity`.
 
-## 5-step flow
+> [!info] Refactor 2026-06-06
+> Workflow đã rút từ 5 bước → 2 bước. Xem [[decisions/remove-stock-inquiry]] cho chi tiết. Mọi mô tả về "send inquiry", "track response", "PARTIAL/RESPONDED/TIMEOUT", và "stock reference vs actual" đã hết hiệu lực.
 
-### Bước 1 — Tìm Site (`overseas/process-request/find-sites`)
+## 2-step flow
 
-- System auto-match: Site nào đang kinh doanh merchandise trong request
-- Display: Site name, country, **% mặt hàng khớp**
-- Overseas tick chọn sites muốn tiếp tục
-- "Tiếp tục"
+### Bước 1 — Assign Site cho mặt hàng (`Step1AssignSites.js`)
 
-> Note: chưa hiện qty tồn kho — chỉ có sau Site response.
+Với mỗi mặt hàng trong request:
+- **Chọn đúng 1 Site** (radio-tick) trong bảng (mặt hàng × site).
+- Hoặc **Reject** với lý do bắt buộc.
 
-### Bước 2 — Pick Site + Merchandise (`overseas/process-request/pick`)
+Mỗi mặt hàng có 1 dòng trong `request_site` với status `PICKED` hoặc `REJECTED` (enum đã rút từ 5 giá trị xuống 2).
 
-**Đây là bước phức tạp nhất.**
+Validation:
+- Mỗi mặt hàng phải có ≥ 1 lựa chọn (Site hoặc reject + lý do).
+- Site đã chọn phải đang kinh doanh mặt hàng đó (`site_merchandise` row tồn tại + active).
 
-- Với mỗi site đã tick:
-  - **PICK** (✓): bao gồm trong inquiry
-  - **REJECT** (✗): loại, **bắt buộc nhập lý do**
-- Với mỗi site PICK: tick chọn **subset merchandise** muốn hỏi tồn kho
+API: `POST /api/requests/{id}/merchandise-assignments`.
 
-**Example:**
-```
-Request items: A, B, C
-- Site US: PICK, tick A + B → inquiry hỏi A, B từ Site US
-- Site JP: PICK, tick B + C → inquiry hỏi B, C từ Site JP
-- Site DE: REJECT (reason: "không vận chuyển được hàng C")
-```
+### Bước 2 — Tạo PO batch (`Step2CreatePOs.js`, mới)
 
-Validation: ≥ 1 site picked với ≥ 1 merchandise.
+Bảng hiển thị:
+- Mặt hàng, số lượng yêu cầu, Site đã gán, **tồn kho hiện tại** (đọc thẳng từ `site_merchandise.stock_quantity` qua `siteMerchandiseApi.getBySite(siteId)`), status.
+- Màu nền theo "có đủ stock để fulfill?": xanh đủ, vàng còn ít, đỏ hết.
 
-### Bước 3 — Send Inquiries
+Click **"Tạo PO"** → mở `POCreateDialog`:
+1. Per-site per-item: nhập qty (cap ≤ stock available).
+2. Preview với delivery method (SHIP/AIR/LAND) + expected delivery date.
+3. "Gửi X PO" → 1 batch tạo N PO, mỗi PO 1 site.
 
-- Review → "Gửi yêu cầu kiểm tra tồn kho"
-- Mỗi site nhận notification + có **48h** để respond (see [[features/uc7-stock-inquiry-timeout]])
+API: `POST /api/requests/{id}/po-batch` — trừ tồn kho từ `site_merchandise.stock_quantity` ngay khi tạo, đặt request về DONE.
 
-### Bước 4 — Track Progress
+## API surface (hiện tại)
 
-| Status | Meaning |
-|--------|---------|
-| Chờ PH | PENDING (chờ response) |
-| Một phần | PARTIAL (response 1 phần items) |
-| Đã PH | COMPLETE |
-| Hết hạn | TIMEOUT (≥ 48h chưa response) |
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/requests/{id}/merchandise-assignments` | Lấy assignments hiện có (PENDING/PICKED/REJECTED per mặt hàng) |
+| `POST /api/requests/{id}/merchandise-assignments` | Lưu Step 1 |
+| `GET /api/site-merchandise/site/{siteId}` | Stock trực tiếp từ kho Site (thay cho old inventory matrix) |
+| `POST /api/requests/{id}/po-batch` | Step 2 — batch create POs |
 
-"Làm mới" → refresh status. Có thể next step khi **≥ 1 site đã response**.
-
-### Bước 5 — Aggregate & Create POs (`overseas/order-matrix`)
-
-Bảng tổng hợp cross-site cross-item với markers:
-- *(no marker)*: stock chính thức (Site đã PH)
-- *(Ref)*: stock tham khảo (chưa PH, dùng `site_merchandise.stock_quantity`)
-- *(Ref\*)*: timeout, dùng stock tham khảo (cảnh báo)
-
-**Phân chia & Tạo PO:**
-1. "Phân chia & Tạo PO"
-2. Per-site per-item: nhập qty (≤ stock available)
-3. Preview
-4. Per-PO: shipping method (sea/air/road) + delivery date
-5. "Gửi X PO" → tạo nhiều PO cùng lúc (1 PO / site)
-
-## API surface (preliminary)
-
-- `GET /api/process-requests/{id}/matching-sites`
-- `POST /api/stock-inquiries` (create batch)
-- `GET /api/stock-inquiries?processRequestId=…`
-- `POST /api/po/draft` (multi-site batch — see [[features/uc11-12-purchase-order-lifecycle]])
+Các endpoint đã **xóa** trong refactor: `POST /{id}/send-inquiries`, `GET /{id}/inquiry-status`, `GET /{id}/inventory-matrix`.
 
 ## Data touched
 
 - `process_request`, `request_item`
-- `request_site` (per-request per-site selection)
-- `stock_inquiry`, `stock_inquiry_item`
+- `request_site` (per-request × merchandise — status chỉ còn `PICKED` / `REJECTED`)
 - `purchase_order`, `po_detail`
+- `site_merchandise.stock_quantity` — bị trừ khi tạo PO; được **hoàn lại** nếu PO sau đó bị cancel (xem [[decisions/po-cancellation-cascade]]).
 
-## Risks & Refactor notes
-
-> [!warning] Complex multi-step UI state
-> 5 bước = 5 sub-routes trong `pages/overseas/process-request/`. State giữa các bước có thể bị mất khi refresh. Refactor cần **persist state vào URL params hoặc backend** (thay vì context state).
-
-> [!question] Partial response handling
-> User guide ghi "Một phần" status, nhưng không nói có thể create PO với items đã PH không. Đây là [[open-questions#q-20260603-06]].
-
-> [!tip] Stock reference snapshot
-> "Ref" value lấy realtime hay snapshot? Đây là [[open-questions#q-20260603-05]] — quan trọng vì ảnh hưởng concurrent update.
+> [!warning] Cancellation cascade
+> Nếu bất kỳ PO nào trong batch bị hủy, cả ProcessRequest và mọi PO anh em đều bị hủy (`status = CANCELLED` / `REJECTED`) và tồn kho được hoàn lại. Xem [[features/uc11-12-purchase-order-lifecycle]].
 
 ## Related
 
 - [[features/uc4-sales-create-request]] — bước trước
-- [[features/uc7-stock-inquiry-timeout]] — chi tiết 48h timeout
-- [[features/uc11-12-purchase-order-lifecycle]] — bước tiếp theo
+- [[features/uc11-12-purchase-order-lifecycle]] — vòng đời PO sau khi tạo
+- [[decisions/remove-stock-inquiry]] — lý do bỏ inquiry step
+- [[decisions/po-cancellation-cascade]] — cascade khi cancel
+- [[components/processrequest-coordinator]] — orchestrator backend
 
 ---
 
 ## Backlinks
 - [[overview]] — references UC6
-- [[sources/user-guide]] — workflow documented chi tiết
+- [[sources/user-guide]] — workflow gốc (5 bước, nay deprecated)
+- [[decisions/remove-stock-inquiry]] — supersedes old steps 3-5

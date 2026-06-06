@@ -44,7 +44,7 @@ public class ProcessRequestController {
         return ResponseEntity.ok(ApiResponse.ok(service.getSiteOptions(id)));
     }
 
-    // Multi-site: chọn nhiều site / mặt hàng để hỏi tồn kho
+    // Multi-site: lựa chọn (mặt hàng × site)
     @GetMapping("/{id}/site-picks")
     public ResponseEntity<ApiResponse<Object>> getSitePicks(@PathVariable Integer id) {
         return ResponseEntity.ok(ApiResponse.ok(service.getSitePicks(id)));
@@ -58,26 +58,7 @@ public class ProcessRequestController {
         return ResponseEntity.ok(ApiResponse.ok("Site picks saved", null));
     }
 
-    // Step 2: Gửi inquiry
-    @PostMapping("/{id}/send-inquiries")
-    public ResponseEntity<ApiResponse<Object>> sendInquiries(@PathVariable Integer id) {
-        service.sendInquiries(id);
-        return ResponseEntity.ok(ApiResponse.ok("Inquiries sent", null));
-    }
-
-    // Step 3: Trạng thái inquiry
-    @GetMapping("/{id}/inquiry-status")
-    public ResponseEntity<ApiResponse<Object>> getInquiryStatus(@PathVariable Integer id) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getInquiryStatus(id)));
-    }
-
-    // Step 4: Inventory matrix
-    @GetMapping("/{id}/inventory-matrix")
-    public ResponseEntity<ApiResponse<Object>> getInventoryMatrix(@PathVariable Integer id) {
-        return ResponseEntity.ok(ApiResponse.ok(service.getInventoryMatrix(id)));
-    }
-
-    // UC11: Tạo PO batch
+    // Step 2: Tạo PO batch
     @PostMapping("/{id}/po-batch")
     public ResponseEntity<ApiResponse<Object>> createPOBatch(
             @PathVariable Integer id,

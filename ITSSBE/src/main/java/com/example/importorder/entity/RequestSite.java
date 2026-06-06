@@ -34,7 +34,7 @@ public class RequestSite {
     @Column(name = "created_at")
     private LocalDateTime createdAt;
 
-    public enum SelectionStatus { PICKED, REJECTED, INQUIRY_SENT, RESPONDED, TIMEOUT }
+    public enum SelectionStatus { PICKED, REJECTED }
 
     @PrePersist protected void onCreate() { createdAt = LocalDateTime.now(); }
 }

@@ -28,8 +28,7 @@ export default function POCreateDialog({ open, requestId, items, assignments, si
     const init = {};
     assignments.forEach(a => {
       if (!a.assignedSiteId) return;
-      const status = a.status;
-      if (status !== 'RESPONDED' && status !== 'TIMEOUT') return;
+      if (a.status !== 'PICKED') return;
       const siteId = a.assignedSiteId;
       if (!init[siteId]) init[siteId] = {};
       const stockInfo = matrix[siteId]?.[a.merchandiseId];
@@ -117,7 +116,7 @@ export default function POCreateDialog({ open, requestId, items, assignments, si
                 return React.createElement(Box, { key: a.merchandiseId, sx: { display: 'flex', alignItems: 'center', gap: 2, mb: 1 } },
                   React.createElement(Box, { sx: { flex: 1 } },
                     React.createElement(Typography, { variant: 'body2', fontWeight: 600, children: a.merchandiseCode }),
-                    React.createElement(Typography, { variant: 'caption', color: 'text.secondary', children: 'YC: ' + a.requestedQty + ' | ' + t('overseas.processRequest.stock') + ' ' + max + ' ' + a.unit + (source === 'reference' ? ' ' + t('overseas.processRequest.refStock') : source === 'reference_timeout' ? ' ' + t('overseas.processRequest.refTimeoutStock') : '') })
+                    React.createElement(Typography, { variant: 'caption', color: 'text.secondary', children: 'YC: ' + a.requestedQty + ' | ' + t('overseas.processRequest.stock') + ' ' + max + ' ' + a.unit + (source === 'reference' ? ' ' + t('overseas.processRequest.refStock') : '') })
                   ),
                   React.createElement(TextField, {
                     type: 'number', size: 'small', label: t('overseas.processRequest.enterOrderQty'), value: current,

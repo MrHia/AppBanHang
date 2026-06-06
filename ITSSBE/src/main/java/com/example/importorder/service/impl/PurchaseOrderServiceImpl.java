@@ -22,6 +22,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
     private final PODetailRepository podRepo;
     private final ProcessRequestRepository prRepo;
     private final SiteRepository siteRepo;
+    private final SiteMerchandiseRepository smRepo;
     private final MerchandiseRepository mRepo;
     private final IAuditService auditService;
     private final INotificationService notificationService;
@@ -31,6 +32,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
 
     public PurchaseOrderServiceImpl(PurchaseOrderRepository poRepo, PODetailRepository podRepo,
             ProcessRequestRepository prRepo, SiteRepository siteRepo,
+            SiteMerchandiseRepository smRepo,
             MerchandiseRepository mRepo, IAuditService auditService,
             INotificationService notificationService, IEmailService emailService,
             PurchaseOrderMapper mapper, ApplicationEventPublisher eventPublisher) {
@@ -38,6 +40,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         this.podRepo = podRepo;
         this.prRepo = prRepo;
         this.siteRepo = siteRepo;
+        this.smRepo = smRepo;
         this.mRepo = mRepo;
         this.auditService = auditService;
         this.notificationService = notificationService;
@@ -100,12 +103,11 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
         if (dto.expectedDelivery != null) po.setExpectedDelivery(LocalDate.parse(dto.expectedDelivery));
         if (dto.deliveryMethod != null) po.setDeliveryMethod(PurchaseOrder.DeliveryMethod.valueOf(dto.deliveryMethod));
-        if (dto.status != null) po.setStatus(PurchaseOrder.POStatus.valueOf(dto.status)); // admin can thiệp status
+        if (dto.status != null) po.setStatus(PurchaseOrder.POStatus.valueOf(dto.status));
         poRepo.save(po);
         return mapper.toDTO(po);
     }
 
-    // UC12: Update PO with items when it is in DRAFT status (after rejection)
     @Override
     @Transactional
     public PurchaseOrderDTO updateWithItems(Integer id, PurchaseOrderDTO dto) {
@@ -118,9 +120,7 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         poRepo.save(po);
 
         if (dto.details != null) {
-            // Remove existing items
             podRepo.deleteByPurchaseOrderId(id);
-            // Add new items
             for (PODetailDTO det : dto.details) {
                 PODetail pod = new PODetail();
                 pod.setPurchaseOrder(po);
@@ -137,40 +137,112 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
     @Transactional
     public void sendPO(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        po.send(); // State pattern: throws if not DRAFT, transitions to SENT
+        po.send();
         poRepo.save(po);
         eventPublisher.publishEvent(new POSentEvent(po.getId(), po.getCode()));
     }
 
-    // UC16: When Site confirms PO -> auto-notify WAREHOUSE (via PONotificationListener + POEmailListener)
     @Override
     @Transactional
     public void confirmPO(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        po.confirm(); // State pattern: throws if not SENT, transitions to CONFIRMED + sets confirmedAt
+        po.confirm();
         poRepo.save(po);
         eventPublisher.publishEvent(
             new POConfirmedEvent(po.getId(), po.getCode(), po.getSite().getName(), "warehouse@system.com")
         );
     }
 
-    // SRS UC12: PO goes to DRAFT (so Overseas can edit and resend) preserving rejectionReason
+    /**
+     * Cancel a PO and cascade the cancellation to the parent ProcessRequest and
+     * all sibling POs of the same request.
+     *
+     * Why: business rule — once any PO of a request is cancelled, the whole
+     * request is treated as cancelled (the merchandise allocation no longer
+     * matches what Sales asked for). Stock that was deducted at PO creation
+     * time is restored on each cancelled non-DRAFT sibling.
+     *
+     * The cascade is idempotent: re-cancelling an already-REJECTED PO short-
+     * circuits at the state machine (`REJECTED is terminal`).
+     */
     @Override
     @Transactional
     public void rejectPO(Integer id, String reason) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        // State pattern: SENT -> REJECTED -> DRAFT, rejectionReason preserved by RejectedState
+        PurchaseOrder.POStatus prevStatus = po.getStatus();
+
         po.reject(reason);
-        po.resetFromRejected();
         poRepo.save(po);
+
+        if (consumedStock(prevStatus)) {
+            restoreStockForPO(po);
+        }
+
         eventPublisher.publishEvent(new PORejectedEvent(po.getId(), po.getCode(), reason));
+
+        cascadeCancelRequest(po.getProcessRequest(), po, reason);
     }
 
     @Override
     @Transactional
     public void markDone(Integer id) {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
-        po.markDone(); // State pattern: only CONFIRMED -> DONE
+        po.markDone();
         poRepo.save(po);
+    }
+
+    /**
+     * Cancel the parent ProcessRequest and every sibling PO. Stock is
+     * restored for any sibling that had previously consumed it (SENT or
+     * CONFIRMED). Already-terminal siblings (REJECTED / DONE) are skipped.
+     */
+    private void cascadeCancelRequest(ProcessRequest pr, PurchaseOrder triggerPo, String reason) {
+        if (pr == null) return;
+        if (pr.getStatus() == ProcessRequest.RequestStatus.CANCELLED) return;
+
+        pr.setStatus(ProcessRequest.RequestStatus.CANCELLED);
+        prRepo.save(pr);
+        auditService.log(null, "REQUEST_CANCELLED_CASCADE", "process_request", pr.getId(),
+            "Cancelled because PO " + triggerPo.getCode() + " was rejected: " + reason);
+
+        for (PurchaseOrder sibling : poRepo.findByProcessRequestId(pr.getId())) {
+            if (Objects.equals(sibling.getId(), triggerPo.getId())) continue;
+            PurchaseOrder.POStatus prev = sibling.getStatus();
+            if (prev == PurchaseOrder.POStatus.REJECTED || prev == PurchaseOrder.POStatus.DONE) continue;
+
+            String siblingReason = "Cascaded from PO " + triggerPo.getCode() + ": " + reason;
+            sibling.reject(siblingReason);
+            poRepo.save(sibling);
+            if (consumedStock(prev)) {
+                restoreStockForPO(sibling);
+            }
+            auditService.log(null, "PO_CANCELLED_CASCADE", "purchase_order", sibling.getId(), siblingReason);
+        }
+
+        notificationService.createNotification(
+            "OVERSEAS",
+            "Request " + pr.getCode() + " cancelled",
+            "PO " + triggerPo.getCode() + " was cancelled — the parent request and all sibling POs were cancelled (stock restored).",
+            "process_request",
+            pr.getId()
+        );
+    }
+
+    private boolean consumedStock(PurchaseOrder.POStatus status) {
+        return status == PurchaseOrder.POStatus.SENT || status == PurchaseOrder.POStatus.CONFIRMED;
+    }
+
+    private void restoreStockForPO(PurchaseOrder po) {
+        if (po.getSite() == null) return;
+        Integer siteId = po.getSite().getId();
+        for (PODetail d : podRepo.findByPurchaseOrderId(po.getId())) {
+            Integer merchId = d.getMerchandise() != null ? d.getMerchandise().getId() : null;
+            if (merchId == null) continue;
+            smRepo.findBySiteIdAndMerchandiseId(siteId, merchId).ifPresent(sm -> {
+                int curr = sm.getStockQuantity() != null ? sm.getStockQuantity() : 0;
+                sm.setStockQuantity(curr + d.getQuantity());
+                smRepo.save(sm);
+            });
+        }
     }
 }
