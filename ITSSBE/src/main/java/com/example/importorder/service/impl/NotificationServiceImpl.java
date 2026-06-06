@@ -21,20 +21,30 @@ public class NotificationServiceImpl implements INotificationService {
     }
 
     /**
-     * Mapper xử lý pure transformation, còn unreadCount cần query DB nên set ở service layer
-     * (giữ Mapper "thin" — SRP: mapper chỉ map field, không truy DB).
+     * Mapper xử lý pure transformation; unreadCount cần query DB nên set ở service layer
+     * để giữ Mapper "thin" (SRP). When a siteId is known, count per (role, site); otherwise
+     * fall back to the role-only count.
      */
-    private NotificationDTO toDTOWithUnreadCount(Notification n) {
+    private NotificationDTO toDTOWithUnreadCount(Notification n, Integer siteIdContext) {
         NotificationDTO d = mapper.toDTO(n);
-        d.unreadCount = notificationRepo.countByRecipientRoleAndIsReadFalse(n.getRecipientRole());
+        d.unreadCount = siteIdContext != null
+                ? notificationRepo.countUnreadByRoleAndSite(n.getRecipientRole(), siteIdContext)
+                : notificationRepo.countByRecipientRoleAndIsReadFalse(n.getRecipientRole());
         return d;
     }
 
     @Override
     @Transactional
     public void createNotification(String recipientRole, String title, String message, String entityType, Integer entityId) {
+        createNotification(recipientRole, null, title, message, entityType, entityId);
+    }
+
+    @Override
+    @Transactional
+    public void createNotification(String recipientRole, Integer recipientSiteId, String title, String message, String entityType, Integer entityId) {
         Notification n = new Notification();
         n.setRecipientRole(recipientRole);
+        n.setRecipientSiteId(recipientSiteId);
         n.setTitle(title);
         n.setMessage(message);
         n.setEntityType(entityType);
@@ -45,12 +55,36 @@ public class NotificationServiceImpl implements INotificationService {
 
     @Override
     public List<NotificationDTO> getNotificationsByRole(String role) {
-        return notificationRepo.findByRecipientRoleOrderByCreatedAtDesc(role).stream().map(this::toDTOWithUnreadCount).toList();
+        return notificationRepo.findByRecipientRoleOrderByCreatedAtDesc(role).stream()
+                .map(n -> toDTOWithUnreadCount(n, null)).toList();
     }
 
     @Override
     public List<NotificationDTO> getUnreadByRole(String role) {
-        return notificationRepo.findUnreadByRole(role).stream().map(this::toDTOWithUnreadCount).toList();
+        return notificationRepo.findUnreadByRole(role).stream()
+                .map(n -> toDTOWithUnreadCount(n, null)).toList();
+    }
+
+    @Override
+    public long getUnreadCount(String role) {
+        return notificationRepo.countByRecipientRoleAndIsReadFalse(role);
+    }
+
+    @Override
+    public List<NotificationDTO> getNotificationsByRoleAndSite(String role, Integer siteId) {
+        return notificationRepo.findByRoleAndSite(role, siteId).stream()
+                .map(n -> toDTOWithUnreadCount(n, siteId)).toList();
+    }
+
+    @Override
+    public List<NotificationDTO> getUnreadByRoleAndSite(String role, Integer siteId) {
+        return notificationRepo.findUnreadByRoleAndSite(role, siteId).stream()
+                .map(n -> toDTOWithUnreadCount(n, siteId)).toList();
+    }
+
+    @Override
+    public long getUnreadCountByRoleAndSite(String role, Integer siteId) {
+        return notificationRepo.countUnreadByRoleAndSite(role, siteId);
     }
 
     @Override
@@ -59,10 +93,5 @@ public class NotificationServiceImpl implements INotificationService {
         Notification n = notificationRepo.findById(id).orElseThrow();
         n.setIsRead(true);
         notificationRepo.save(n);
-    }
-
-    @Override
-    public long getUnreadCount(String role) {
-        return notificationRepo.countByRecipientRoleAndIsReadFalse(role);
     }
 }

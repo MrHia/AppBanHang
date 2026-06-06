@@ -101,6 +101,23 @@ Chronological record of all wiki operations.
 - Contradiction ghi nhận: x-20260606-01 (cột `plain_password` vs decision [[decisions/bcrypt-password-hashing]]).
 - Pages updated: [[contradictions]]
 
+## [2026-06-06] bugfix | Site never received "new PO" notification when Overseas dispatched a batch
+- Driver: user question — *"Có phát hiện ra bug khi oversea gửi order nhưng site không nhận được k?"*
+- Root cause: two separate gaps stacked.
+  - **Bug A**: `ProcessRequestServiceImpl.createPOBatch` writes `status=SENT` to the DB directly without calling `eventPublisher.publishEvent(new POSentEvent(...))`. The `sendPO()` state-machine path *did* publish the event, but the batch shortcut bypassed it entirely, so `POAuditListener.onPOSent` (and anything else listening) never fired.
+  - **Bug B**: `PONotificationListener` had **no** `onPOSent` handler at all — even an explicit `sendPO` call would never create a SITE notification. The codebase had zero rows with `recipient_role='SITE'` for the bell icon.
+  - **Side bug**: notification dropdown deep-linked every `purchase_order` notification to `/warehouse/confirmed-pos` regardless of role, so a SITE user clicking the bell hit a forbidden Warehouse route.
+- Fix: introduce per-site addressing in `notification` (new `recipient_site_id INT NULL`), so the existing role-wide broadcast semantics are preserved (NULL) and SITE rows now target one site (non-NULL).
+  - Entity `Notification` + `NotificationDTO` + `NotificationRepository` (3 new per-(role, site) queries) + `INotificationService` (overload + 3 new read methods) + `NotificationServiceImpl` + `NotificationController` (optional `siteId` query param).
+  - `POSentEvent` extended with `siteId`, `siteName`.
+  - `PurchaseOrderServiceImpl.sendPO` publishes the richer event.
+  - `ProcessRequestServiceImpl` injects `ApplicationEventPublisher` and publishes `POSentEvent` for every PO in the batch, just before transitioning the request to DONE.
+  - `PONotificationListener.onPOSent` creates a notification with `recipientSiteId = siteId`, so only that site's users see the bell badge.
+  - FE: `notificationApi.{getByRole,getUnread,getUnreadCount}` accept `siteId`; `layouts/dashboard/index.js` passes `user.siteId`; new `notificationDeepLink(n)` routes the click target by `user.roleName` (SITE → /site/purchase-orders, WAREHOUSE → /warehouse/confirmed-pos, etc.).
+  - SQL: `notification` gains `recipient_site_id INT NULL` + FK to `site(id)` + idempotent `ALTER TABLE … ADD COLUMN IF NOT EXISTS` for existing DBs.
+- Tests: 40/40 pass. Updated `POEventPublishTest.auditListenerLogsPOSent` for the new event signature, added `notificationListenerNotifiesTargetSiteOnPOSent` covering the per-site notification path.
+- Pages updated: [[components/backend-events]] (POSentEvent now richer + acts as the "PO sent to Site" hook), [[components/backend-architecture]] (notification table +1 column).
+
 ## [2026-06-06] refactor | Remove stock-inquiry subsystem (Task 1) + cascade-cancel PO → ProcessRequest (Task 2)
 - Driver: user request — *"stock inquiry response cần phải bỏ đi vì mình không cần nó nữa"* và *"1 trong bất cứ purchased order ... bị huỷ thì đơn request tổng cần được hủy luôn"*.
 - BE deletions (21 files): entities `StockInquiry`/`StockInquiryItem`, DTOs `StockInquiryDTO`/`StockInquiryItemDTO`/`InquiryStatusDTO`/`StockInfoDTO`, repositories `StockInquiry*Repository`, services `IStockInquiryService`+impl, `IInquiryCoordinationService`+impl, controller `StockInquiryController`, mapper `StockInquiryMapper`, scheduler `StockInquiryTimeoutScheduler`, event `InquiryTimeoutEvent`, domain package `domain/inquiry/stocksource/` (6 files), test `StockSourceTest`.

@@ -129,22 +129,39 @@ function OrderMatrixContent() {
   if (loading) return <LinearProgress />;
   if (!request) return <Container maxWidth="lg"><Typography variant="h6" color="text.secondary" sx={{ mt: 4 }}>Không tìm thấy yêu cầu</Typography></Container>;
 
+  // PO chỉ được nhập khi request còn xử lý (PENDING/PROCESSING).
+  // Khi đã DONE (PO đã gửi) hoặc CANCELLED → khoá form, không hiện textbox.
+  const isLocked = request.status === 'DONE' || request.status === 'CANCELLED';
+  const lockedReason = request.status === 'DONE'
+    ? 'Purchase Order đã được tạo và gửi cho yêu cầu này — không thể nhập lại số lượng.'
+    : 'Yêu cầu đã bị hủy — không thể tạo PO mới.';
+  const lockedSeverity = request.status === 'CANCELLED' ? 'error' : 'success';
+
   return (
     <Container maxWidth="lg" sx={{ pb: 6 }}>
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2, mb: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mt: 2, mb: 2, flexWrap: 'wrap' }}>
         <Inventory2Icon color="primary" />
         <Typography variant="h5" fontWeight={800} color="primary.main">Đặt hàng nhập khẩu</Typography>
         <Chip label={request.code} sx={{ fontFamily: 'monospace', fontWeight: 700, bgcolor: '#EEF2FF', color: '#4338CA' }} />
+        <Chip
+          label={request.status}
+          size="small"
+          color={request.status === 'DONE' ? 'success' : request.status === 'CANCELLED' ? 'error' : request.status === 'PROCESSING' ? 'info' : 'warning'}
+        />
         {request.desiredDate && (
           <Chip label={`Cần nhận trước: ${request.desiredDate}`} variant="outlined" color="primary" />
         )}
       </Box>
 
-      <Alert severity="info" sx={{ mb: 2 }}>
-        Mỗi mặt hàng hiện danh sách <b>site đáp ứng được ngày nhận</b> kèm tồn kho, phương thức vận chuyển và ngày dự kiến giao.
-        Bạn nhập số lượng vào dòng muốn đặt — có thể chia nhiều site nếu 1 site không đủ.
-        Số lượng phải <b>&gt; 0</b> và <b>≤ tồn kho</b>; tổng số đặt phải <b>≥ số sales yêu cầu</b>.
-      </Alert>
+      {isLocked ? (
+        <Alert severity={lockedSeverity} sx={{ mb: 2 }}>{lockedReason}</Alert>
+      ) : (
+        <Alert severity="info" sx={{ mb: 2 }}>
+          Mỗi mặt hàng hiện danh sách <b>site đáp ứng được ngày nhận</b> kèm tồn kho, phương thức vận chuyển và ngày dự kiến giao.
+          Bạn nhập số lượng vào dòng muốn đặt — có thể chia nhiều site nếu 1 site không đủ.
+          Số lượng phải <b>&gt; 0</b> và <b>≤ tồn kho</b>; tổng số đặt phải <b>≥ số sales yêu cầu</b>.
+        </Alert>
+      )}
 
       {error && <Alert severity="error" sx={{ mb: 2 }} onClose={() => setError('')}>{error}</Alert>}
 
@@ -155,10 +172,14 @@ function OrderMatrixContent() {
       {options.map(opt => {
         const totalOrdered = totalsByMerch[opt.merchandiseId] || 0;
         const enough = totalOrdered >= (opt.requestedQty || 0);
-        // Ưu tiên (theo UC): SHIP > AIR, sau đó tồn kho nhiều nhất trước
+        // Ưu tiên (theo UC): SHIP > AIR, sau đó tồn kho nhiều nhất trước.
+        // Tie-breaker theo siteCode (numeric collation) để thứ tự ổn định khi
+        // 2 site có cùng stock — tránh việc hàng nhảy chỗ mỗi lần reload.
         const sortedRows = [...(opt.rows || [])].sort((a, b) => {
           if (a.deliveryMethod !== b.deliveryMethod) return a.deliveryMethod === 'SHIP' ? -1 : 1;
-          return (b.stockQuantity || 0) - (a.stockQuantity || 0);
+          const stockDiff = (b.stockQuantity || 0) - (a.stockQuantity || 0);
+          if (stockDiff !== 0) return stockDiff;
+          return String(a.siteCode || '').localeCompare(String(b.siteCode || ''), undefined, { numeric: true });
         });
         return (
           <Card key={opt.merchandiseId} elevation={0} sx={{ border: `1px solid ${C.border}`, mb: 3 }}>
@@ -188,7 +209,9 @@ function OrderMatrixContent() {
                       <TableCell sx={{ fontWeight: 700 }} align="right">Tồn kho</TableCell>
                       <TableCell sx={{ fontWeight: 700 }}>Phương thức</TableCell>
                       <TableCell sx={{ fontWeight: 700 }} align="center">Ngày dự kiến giao</TableCell>
-                      <TableCell sx={{ fontWeight: 700 }} align="center">Số lượng đặt</TableCell>
+                      {!isLocked && (
+                        <TableCell sx={{ fontWeight: 700 }} align="center">Số lượng đặt</TableCell>
+                      )}
                     </TableRow>
                   </TableHead>
                   <TableBody>
@@ -217,17 +240,19 @@ function OrderMatrixContent() {
                             <Typography variant="body2">{row.expectedDelivery}</Typography>
                             <Typography variant="caption" color="text.secondary">({row.deliveryDays} ngày)</Typography>
                           </TableCell>
-                          <TableCell align="center">
-                            <TextField
-                              size="small"
-                              type="number"
-                              inputProps={{ min: 0, max: row.stockQuantity, style: { textAlign: 'right', width: 70 } }}
-                              value={v || ''}
-                              onChange={(e) => handleQty(opt.merchandiseId, row.siteId, row.deliveryMethod, e.target.value, row.stockQuantity)}
-                              error={v > row.stockQuantity}
-                              helperText={v > row.stockQuantity ? `>${row.stockQuantity}` : ''}
-                            />
-                          </TableCell>
+                          {!isLocked && (
+                            <TableCell align="center">
+                              <TextField
+                                size="small"
+                                type="number"
+                                inputProps={{ min: 0, max: row.stockQuantity, style: { textAlign: 'right', width: 70 } }}
+                                value={v || ''}
+                                onChange={(e) => handleQty(opt.merchandiseId, row.siteId, row.deliveryMethod, e.target.value, row.stockQuantity)}
+                                error={v > row.stockQuantity}
+                                helperText={v > row.stockQuantity ? `>${row.stockQuantity}` : ''}
+                              />
+                            </TableCell>
+                          )}
                         </TableRow>
                       );
                     })}
@@ -239,28 +264,30 @@ function OrderMatrixContent() {
         );
       })}
 
-      <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', position: 'sticky', bottom: 0, bgcolor: '#fff', borderTop: `1px solid ${C.border}`, py: 2, px: 1 }}>
-        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
-          <Chip label={`${poCount} PO sẽ tạo`} variant="outlined" />
-          <Chip label={`Tổng ${totalUnits} đơn vị`} variant="outlined" color={totalUnits > 0 ? 'primary' : 'default'} />
-          {!allFilled && totalUnits > 0 && (
-            <Chip label="Chưa đủ số lượng yêu cầu" color="warning" />
-          )}
+      {!isLocked && (
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 2, flexWrap: 'wrap', position: 'sticky', bottom: 0, bgcolor: '#fff', borderTop: `1px solid ${C.border}`, py: 2, px: 1 }}>
+          <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', flexWrap: 'wrap' }}>
+            <Chip label={`${poCount} PO sẽ tạo`} variant="outlined" />
+            <Chip label={`Tổng ${totalUnits} đơn vị`} variant="outlined" color={totalUnits > 0 ? 'primary' : 'default'} />
+            {!allFilled && totalUnits > 0 && (
+              <Chip label="Chưa đủ số lượng yêu cầu" color="warning" />
+            )}
+          </Box>
+          <Tooltip title={poCount === 0 ? 'Nhập số lượng cho ít nhất 1 dòng' : ''}>
+            <span>
+              <Button
+                variant="contained"
+                size="large"
+                startIcon={<ShoppingCartIcon />}
+                disabled={poCount === 0 || submitting || !allFilled}
+                onClick={handleCreatePO}
+              >
+                {submitting ? 'Đang tạo...' : `Gửi đặt hàng (${poCount} PO)`}
+              </Button>
+            </span>
+          </Tooltip>
         </Box>
-        <Tooltip title={poCount === 0 ? 'Nhập số lượng cho ít nhất 1 dòng' : ''}>
-          <span>
-            <Button
-              variant="contained"
-              size="large"
-              startIcon={<ShoppingCartIcon />}
-              disabled={poCount === 0 || submitting || !allFilled}
-              onClick={handleCreatePO}
-            >
-              {submitting ? 'Đang tạo...' : `Gửi đặt hàng (${poCount} PO)`}
-            </Button>
-          </span>
-        </Tooltip>
-      </Box>
+      )}
 
       <Box sx={{ mt: 2 }}>
         <Button onClick={() => router.back()}>← Quay lại danh sách</Button>

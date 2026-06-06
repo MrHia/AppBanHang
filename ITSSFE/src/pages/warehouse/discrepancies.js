@@ -112,8 +112,16 @@ function DiscrepanciesContent() {
       if (!map.has(key)) map.set(key, []);
       map.get(key).push(d);
     });
-    const arr = [...map.entries()].map(([reqCode, list]) => ({ reqCode, discs: list, maxId: Math.max(...list.map(x => x.id)) }));
-    arr.sort((a, b) => b.maxId - a.maxId);
+    // Math.max(...[]) là -Infinity; defensive fallback về 0.
+    // Tie-breaker theo reqCode (numeric collation) cho stable order.
+    const arr = [...map.entries()].map(([reqCode, list]) => {
+      const ids = list.map(x => x.id || 0);
+      return { reqCode, discs: list, maxId: ids.length ? Math.max(...ids) : 0 };
+    });
+    arr.sort((a, b) =>
+      (b.maxId - a.maxId) ||
+      String(a.reqCode || '').localeCompare(String(b.reqCode || ''), undefined, { numeric: true })
+    );
     return arr;
   }, [discrepancies]);
 

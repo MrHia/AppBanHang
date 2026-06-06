@@ -2,11 +2,13 @@ package com.example.importorder.service.impl;
 
 import com.example.importorder.dto.*;
 import com.example.importorder.entity.*;
+import com.example.importorder.event.POSentEvent;
 import com.example.importorder.mapper.ProcessRequestMapper;
 import com.example.importorder.repository.*;
 import com.example.importorder.service.*;
 import com.example.importorder.validation.AssignmentContext;
 import com.example.importorder.validation.AssignmentValidationService;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.time.LocalDate;
@@ -29,6 +31,7 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
     private final IAuditService auditService;
     private final ProcessRequestMapper mapper;
     private final AssignmentValidationService validationService;
+    private final ApplicationEventPublisher eventPublisher;
 
     public ProcessRequestServiceImpl(
             ProcessRequestRepository prRepo, RequestItemRepository riRepo,
@@ -37,12 +40,14 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             RequestSiteRepository rsRepo, PurchaseOrderRepository poRepo,
             PODetailRepository podRepo, IAuditService auditService,
             ProcessRequestMapper mapper,
-            AssignmentValidationService validationService) {
+            AssignmentValidationService validationService,
+            ApplicationEventPublisher eventPublisher) {
         this.prRepo = prRepo; this.riRepo = riRepo; this.mRepo = mRepo;
         this.accRepo = accRepo; this.siteRepo = siteRepo; this.smRepo = smRepo;
         this.rsRepo = rsRepo; this.poRepo = poRepo; this.podRepo = podRepo;
         this.auditService = auditService; this.mapper = mapper;
         this.validationService = validationService;
+        this.eventPublisher = eventPublisher;
     }
 
     private ProcessRequestDTO toDTOWithItemCount(ProcessRequest pr) {
@@ -336,6 +341,16 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
 
         ProcessRequest pr = prRepo.findByIdWithItems(requestId).orElseThrow();
 
+        // Guard: chỉ cho tạo PO khi request còn xử lý (PENDING/PROCESSING).
+        // Đã DONE = PO đã được tạo và gửi rồi. Đã CANCELLED = không tạo PO mới.
+        ProcessRequest.RequestStatus status = pr.getStatus();
+        if (status == ProcessRequest.RequestStatus.DONE) {
+            throw new IllegalStateException("Yêu cầu " + pr.getCode() + " đã tạo Purchase Order — không thể tạo lại.");
+        }
+        if (status == ProcessRequest.RequestStatus.CANCELLED) {
+            throw new IllegalStateException("Yêu cầu " + pr.getCode() + " đã bị hủy — không thể tạo Purchase Order.");
+        }
+
         Map<Integer, Integer> requestedByMerch = new HashMap<>();
         for (RequestItem ri : pr.getRequestItems()) {
             requestedByMerch.merge(ri.getMerchandise().getId(), ri.getQuantity(), Integer::sum);
@@ -431,6 +446,12 @@ public class ProcessRequestServiceImpl implements IProcessRequestService {
             dto.expectedDelivery = po.getExpectedDelivery() != null ? po.getExpectedDelivery().toString() : null;
             dto.createdAt = po.getCreatedAt() != null ? po.getCreatedAt().toString() : null;
             createdPOs.add(dto);
+
+            // Publish POSentEvent so the SITE notification + audit listeners fire.
+            // Previously the batch path set status=SENT directly and never published the
+            // event — the target Site never saw a bell-icon notification when its PO
+            // arrived (it only learned via the 15s polling on /site/purchase-orders).
+            eventPublisher.publishEvent(new POSentEvent(po.getId(), po.getCode(), site.getId(), site.getName()));
         }
 
         pr.setStatus(ProcessRequest.RequestStatus.DONE);

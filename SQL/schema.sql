@@ -69,13 +69,20 @@ ALTER TABLE account ADD COLUMN IF NOT EXISTS plain_password VARCHAR(100);
 CREATE TABLE IF NOT EXISTS notification (
     id INT AUTO_INCREMENT PRIMARY KEY,
     recipient_role VARCHAR(50) NOT NULL,
+    -- NULL = role-wide broadcast (existing semantics for WAREHOUSE/OVERSEAS).
+    -- Non-null = target a specific site (used for "PO sent to your site").
+    recipient_site_id INT NULL,
     title VARCHAR(255) NOT NULL,
     message TEXT NOT NULL,
     is_read BOOLEAN DEFAULT FALSE,
     entity_type VARCHAR(50),
     entity_id INT,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (recipient_site_id) REFERENCES site(id)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+
+-- Idempotent migration for existing DBs that pre-date the per-site addressing.
+ALTER TABLE notification ADD COLUMN IF NOT EXISTS recipient_site_id INT NULL;
 
 -- =========================================
 -- Table: merchandise (master product catalog)

@@ -25,11 +25,14 @@ function AdminPurchaseOrders() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  // numeric:true cho mã PO/REQ chứa số (PO-…-2 vs PO-…-10);
+  // tie-breaker theo id để stable.
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { numeric: true });
   const sorted = React.useMemo(() => {
     const arr = [...pos];
     if (sort === 'newest') arr.sort((a, b) => (b.id || 0) - (a.id || 0));
     else if (sort === 'oldest') arr.sort((a, b) => (a.id || 0) - (b.id || 0));
-    else if (sort === 'req') arr.sort((a, b) => String(a.processRequestCode || '').localeCompare(String(b.processRequestCode || '')));
+    else if (sort === 'req') arr.sort((a, b) => cmp(a.processRequestCode, b.processRequestCode) || (a.id || 0) - (b.id || 0));
     return arr;
   }, [pos, sort]);
 

@@ -146,10 +146,14 @@ export const warehouseApi = {
   resolveDiscrepancy: (id, notes, resolvedBy) => wrap('post', `/warehouse/discrepancy/${id}/resolve?notes=${encodeURIComponent(notes || '')}&resolvedBy=${resolvedBy}`),
 };
 
+// SITE users must pass their siteId so the BE filters out other sites' notifications.
+// ADMIN/OVERSEAS/WAREHOUSE/SALES pass null/undefined for siteId and fall back to
+// role-only semantics.
+const siteParam = (siteId) => siteId != null ? `&siteId=${siteId}` : '';
 export const notificationApi = {
-  getByRole: (role) => wrap('get', `/notifications?role=${role}`),
-  getUnread: (role) => wrap('get', `/notifications/unread?role=${role}`),
-  getUnreadCount: (role) => wrap('get', `/notifications/unread-count?role=${role}`),
+  getByRole: (role, siteId) => wrap('get', `/notifications?role=${role}${siteParam(siteId)}`),
+  getUnread: (role, siteId) => wrap('get', `/notifications/unread?role=${role}${siteParam(siteId)}`),
+  getUnreadCount: (role, siteId) => wrap('get', `/notifications/unread-count?role=${role}${siteParam(siteId)}`),
   markAsRead: (id) => wrap('post', `/notifications/${id}/read`),
 };
 

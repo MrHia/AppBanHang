@@ -22,11 +22,14 @@ function AdminOrderRequests() {
   }, []);
   React.useEffect(() => { load(); }, [load]);
 
+  // numeric:true để mã có số (REQ-…-2 vs REQ-…-10) sort đúng;
+  // tie-breaker id để stable giữa các lần refresh.
+  const cmp = (x, y) => String(x || '').localeCompare(String(y || ''), undefined, { numeric: true });
   const sorted = React.useMemo(() => {
     const arr = [...requests];
-    if (sort === 'newest') arr.sort((a, b) => String(b.createdAt || '').localeCompare(String(a.createdAt || '')));
-    else if (sort === 'oldest') arr.sort((a, b) => String(a.createdAt || '').localeCompare(String(b.createdAt || '')));
-    else if (sort === 'code') arr.sort((a, b) => String(a.code || '').localeCompare(String(b.code || '')));
+    if (sort === 'newest') arr.sort((a, b) => cmp(b.createdAt, a.createdAt) || (b.id || 0) - (a.id || 0));
+    else if (sort === 'oldest') arr.sort((a, b) => cmp(a.createdAt, b.createdAt) || (a.id || 0) - (b.id || 0));
+    else if (sort === 'code') arr.sort((a, b) => cmp(a.code, b.code) || (a.id || 0) - (b.id || 0));
     return arr;
   }, [requests, sort]);
 

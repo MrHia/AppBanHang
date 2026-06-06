@@ -139,7 +139,9 @@ public class PurchaseOrderServiceImpl implements IPurchaseOrderService {
         PurchaseOrder po = poRepo.findById(id).orElseThrow();
         po.send();
         poRepo.save(po);
-        eventPublisher.publishEvent(new POSentEvent(po.getId(), po.getCode()));
+        Integer siteId = po.getSite() != null ? po.getSite().getId() : null;
+        String siteName = po.getSite() != null ? po.getSite().getName() : null;
+        eventPublisher.publishEvent(new POSentEvent(po.getId(), po.getCode(), siteId, siteName));
     }
 
     @Override

@@ -124,7 +124,7 @@ class POEventPublishTest {
         IAuditService auditService = mock(IAuditService.class);
         POAuditListener listener = new POAuditListener(auditService);
 
-        listener.onPOSent(new POSentEvent(11, "PO-011"));
+        listener.onPOSent(new POSentEvent(11, "PO-011", 7, "Site US"));
 
         verify(auditService).log(
                 isNull(),
@@ -132,6 +132,24 @@ class POEventPublishTest {
                 eq("purchase_order"),
                 eq(11),
                 contains("PO-011")
+        );
+    }
+
+    @Test
+    void notificationListenerNotifiesTargetSiteOnPOSent() {
+        INotificationService notificationService = mock(INotificationService.class);
+        PONotificationListener listener = new PONotificationListener(notificationService);
+
+        listener.onPOSent(new POSentEvent(42, "PO-042", 7, "Site US"));
+
+        // Uses the per-site overload so only Site US's users see the bell update.
+        verify(notificationService).createNotification(
+                eq("SITE"),
+                eq(7),
+                contains("PO-042"),
+                contains("PO-042"),
+                eq("purchase_order"),
+                eq(42)
         );
     }
 }

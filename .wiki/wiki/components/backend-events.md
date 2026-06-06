@@ -17,7 +17,7 @@ Tất cả là Java `record` (immutable value object) trong package `event/`:
 
 | Event | Constructor | Trigger | Listener side-effects |
 |-------|-------------|---------|------------------------|
-| `POSentEvent` | `(Integer poId, String poCode)` | Overseas bấm "Send PO" → `PurchaseOrderServiceImpl.send()` | Email site, notification site |
+| `POSentEvent` | `(Integer poId, String poCode, Integer siteId, String siteName)` (mở rộng 2026-06-06) | Overseas bấm "Send PO" → `PurchaseOrderServiceImpl.sendPO()`, **hoặc** batch dispatch → `ProcessRequestServiceImpl.createPOBatch()` (mới publish 2026-06-06) | `PONotificationListener.onPOSent` (mới) tạo notification per-site cho SITE; `POAuditListener.onPOSent` log audit |
 | `POConfirmedEvent` | `(Integer poId, ...)` | Site confirm PO → `PurchaseOrderServiceImpl.confirm()` | **UC16**: notify WAREHOUSE; email |
 | `PORejectedEvent` | `(Integer poId, String reason)` | Bất kỳ role nào cancel PO → `PurchaseOrderServiceImpl.rejectPO()`. Sau 2026-06-06, đây là **terminal** và **cascade**: service tự CANCEL parent request + sibling POs + restore stock. | Notify OVERSEAS với reason; email |
 | `DiscrepancyCreatedEvent` | `(Integer receiptId, ...)` | Warehouse log discrepancy → `WarehouseServiceImpl.reportDiscrepancy()` | **UC18**: notify SITE; email |

@@ -131,18 +131,34 @@ export default function DashboardLayout({ children }) {
 
   React.useEffect(() => {
     if (user?.roleName) {
-      notificationApi.getUnreadCount(user.roleName).then(c => setNotifCount(typeof c === 'number' ? c : 0)).catch(() => {});
+      // Pass siteId so SITE users only see their own site's notifications.
+      // Other roles ignore the siteId (BE filters return null on it).
+      notificationApi.getUnreadCount(user.roleName, user.siteId).then(c => setNotifCount(typeof c === 'number' ? c : 0)).catch(() => {});
     }
   }, [user]);
 
   const openNotifications = async () => {
     if (!notifOpen) {
       try {
-        const data = await notificationApi.getUnread(user.roleName);
+        const data = await notificationApi.getUnread(user.roleName, user.siteId);
         setNotifications(Array.isArray(data) ? data : []);
       } catch { setNotifications([]); }
     }
     setNotifOpen(!notifOpen);
+  };
+
+  // Route a notification deep-link to the page that's actually meaningful for
+  // the current role. Previously every purchase_order notification routed to
+  // /warehouse/confirmed-pos, which Site users could not even view.
+  const notificationDeepLink = (n) => {
+    if (n.entityType !== 'purchase_order') return null;
+    switch (user?.roleName) {
+      case 'SITE': return '/site/purchase-orders';
+      case 'WAREHOUSE': return '/warehouse/confirmed-pos';
+      case 'OVERSEAS': return '/overseas/purchase-orders';
+      case 'ADMIN': return '/admin/purchase-orders';
+      default: return null;
+    }
   };
 
   const markAllRead = async () => {
@@ -195,7 +211,11 @@ export default function DashboardLayout({ children }) {
                 <Box sx={{ p: 2 }}><Typography variant="body2" color="text.secondary">{t('notifications.noNotif') || 'Không có thông báo mới'}</Typography></Box>
               ) : notifications.map(n => (
                 <Box key={n.id} sx={{ p: 2, borderBottom: '1px solid', borderColor: 'divider', cursor: 'pointer', '&:hover': { bgcolor: 'grey.50' } }}
-                  onClick={() => { setNotifOpen(false); if (n.entityType === 'purchase_order') router.push('/warehouse/confirmed-pos'); }}>
+                  onClick={() => {
+                    setNotifOpen(false);
+                    const dest = notificationDeepLink(n);
+                    if (dest) router.push(dest);
+                  }}>
                   <Typography variant="subtitle2" fontWeight={700}>{n.title}</Typography>
                   <Typography variant="body2" color="text.secondary">{n.message}</Typography>
                   {n.createdAt && <Typography variant="caption" color="text.disabled">{new Date(n.createdAt).toLocaleString()}</Typography>}

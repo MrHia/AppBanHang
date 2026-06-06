@@ -6,6 +6,7 @@ import lombok.Data;
 public class NotificationDTO {
     public Integer id;
     public String recipientRole;
+    public Integer recipientSiteId; // null = role-wide broadcast; non-null = targets one site
     public String title;
     public String message;
     public Boolean isRead;
